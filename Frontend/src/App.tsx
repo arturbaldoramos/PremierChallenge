@@ -10,6 +10,7 @@ const Orders = lazy(() => import('@/pages/Orders'))
 const Activity = lazy(() => import('@/pages/Activity'))
 const Reports = lazy(() => import('@/pages/Reports'))
 const Hospitals = lazy(() => import('@/pages/Hospitals'))
+const FileManager = lazy(() => import('@/pages/FileManager'))
 
 function App() {
   const LoadingFallback = () => (
@@ -85,17 +86,27 @@ function App() {
             </DashboardLayout>
           } 
         />
-        <Route 
-          path="/hospitals" 
-          element={
-            <DashboardLayout>
-              <Suspense fallback={<LoadingFallback />}>
-                <Hospitals />
-              </Suspense>
-            </DashboardLayout>
-          } 
-        />
-      </Routes>
+               <Route
+                 path="/hospitals"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <Hospitals />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/file-manager"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <FileManager />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+             </Routes>
     </Router>
   )
 }
