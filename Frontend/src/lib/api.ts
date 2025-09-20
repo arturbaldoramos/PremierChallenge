@@ -173,14 +173,14 @@ export const api = {
     uploadFile: (file: File) => apiClient.post('estado', file),
   },
 
-  // Cidades
-  cities: {
-    getAll: () => apiClient.get('cidade'),
-    getById: (id: string | number) => apiClient.get('cidade', id),
-    create: (data: any) => apiClient.post('cidade', data),
-    update: (id: string | number, data: any) => apiClient.put('cidade', id, data),
-    delete: (id: string | number) => apiClient.delete('cidade', id),
-    uploadFile: (file: File) => apiClient.post('cidade', file),
+  // Municípios
+  municipalities: {
+    getAll: () => apiClient.get('municipio'),
+    getById: (id: string | number) => apiClient.get('municipio', id),
+    create: (data: any) => apiClient.post('municipio', data),
+    update: (id: string | number, data: any) => apiClient.put('municipio', id, data),
+    delete: (id: string | number) => apiClient.delete('municipio', id),
+    uploadFile: (file: File) => apiClient.post('municipio', file),
   },
 
   // Pacientes
@@ -193,14 +193,14 @@ export const api = {
     uploadFile: (file: File) => apiClient.post('paciente', file),
   },
 
-  // Equipamentos Médicos
-  medicalEquipment: {
-    getAll: () => apiClient.get('equipamento-medico'),
-    getById: (id: string | number) => apiClient.get('equipamento-medico', id),
-    create: (data: any) => apiClient.post('equipamento-medico', data),
-    update: (id: string | number, data: any) => apiClient.put('equipamento-medico', id, data),
-    delete: (id: string | number) => apiClient.delete('equipamento-medico', id),
-    uploadFile: (file: File) => apiClient.post('equipamento-medico', file),
+  // CID (Classificação Internacional de Doenças)
+  cid: {
+    getAll: () => apiClient.get('cid'),
+    getById: (id: string | number) => apiClient.get('cid', id),
+    create: (data: any) => apiClient.post('cid', data),
+    update: (id: string | number, data: any) => apiClient.put('cid', id, data),
+    delete: (id: string | number) => apiClient.delete('cid', id),
+    uploadFile: (file: File) => apiClient.post('cid', file),
   },
 }
 
