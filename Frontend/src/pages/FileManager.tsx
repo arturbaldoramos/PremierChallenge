@@ -378,16 +378,6 @@ export default function FileManager() {
                <p className="text-xs text-muted-foreground mb-4">
                  Tipos suportados: XML, JSON, PDF, CSV, TXT • Sem limite de tamanho - processamento em chunks inteligentes
                </p>
-               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                 <div className="flex items-start gap-2">
-                   <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                   <div className="text-sm text-blue-700">
-                     <p className="font-medium mb-1">Processamento Otimizado para Arquivos Grandes</p>
-                     <p>O sistema foi projetado para processar arquivos de qualquer tamanho (incluindo 10GB+). 
-                     As entidades são preservadas intactas através de chunking inteligente baseado no tipo de arquivo.</p>
-                   </div>
-                 </div>
-               </div>
               <div className="flex items-center justify-center gap-4">
                 <Button onClick={() => fileInputRef.current?.click()}>
                   <Plus className="mr-2 h-4 w-4" />
