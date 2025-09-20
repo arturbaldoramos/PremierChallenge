@@ -9,6 +9,7 @@ const Users = lazy(() => import('@/pages/Users'))
 const Orders = lazy(() => import('@/pages/Orders'))
 const Activity = lazy(() => import('@/pages/Activity'))
 const Reports = lazy(() => import('@/pages/Reports'))
+const Hospitals = lazy(() => import('@/pages/Hospitals'))
 
 function App() {
   const LoadingFallback = () => (
@@ -80,6 +81,16 @@ function App() {
             <DashboardLayout>
               <Suspense fallback={<LoadingFallback />}>
                 <Reports />
+              </Suspense>
+            </DashboardLayout>
+          } 
+        />
+        <Route 
+          path="/hospitals" 
+          element={
+            <DashboardLayout>
+              <Suspense fallback={<LoadingFallback />}>
+                <Hospitals />
               </Suspense>
             </DashboardLayout>
           } 

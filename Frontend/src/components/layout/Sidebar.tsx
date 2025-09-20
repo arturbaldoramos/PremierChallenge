@@ -5,7 +5,8 @@ import {
   Settings, 
   CreditCard,
   Activity,
-  TrendingUp
+  TrendingUp,
+  Building2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,6 +17,7 @@ export function Sidebar() {
   
   const navigationItems = [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/hospitals', label: 'Hospitais', icon: Building2 },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/users', label: 'Usuários', icon: Users },
     { path: '/orders', label: 'Pedidos', icon: CreditCard },

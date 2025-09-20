@@ -14,6 +14,10 @@ const breadcrumbMap: Record<string, BreadcrumbItem[]> = {
   '/dashboard': [
     { label: 'Dashboard', href: '/dashboard' }
   ],
+  '/hospitals': [
+    { label: 'Dashboard', href: '/dashboard' },
+    { label: 'Hospitais', href: '/hospitals' }
+  ],
   '/analytics': [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Analytics', href: '/analytics' }
