@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Read(//c/Users/artur/Desktop/PremiereChallenge/Frontend/**)"
     ],
     "deny": [],
     "ask": []

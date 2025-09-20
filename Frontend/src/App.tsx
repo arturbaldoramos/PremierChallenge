@@ -7,10 +7,13 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Hospitals = lazy(() => import('@/pages/Hospitals'))
 const Doctors = lazy(() => import('@/pages/Doctors'))
 const States = lazy(() => import('@/pages/States'))
-const Patients = lazy(() => import('@/pages/Patients'))
-const Cid = lazy(() => import('@/pages/Cid'))
-const Municipalities = lazy(() => import('@/pages/Municipalities'))
 const FileManager = lazy(() => import('@/pages/FileManager'))
+const DataUpload = lazy(() => import('@/pages/DataUpload'))
+const Analytics = lazy(() => import('@/pages/Analytics'))
+const Reports = lazy(() => import('@/pages/Reports'))
+const Users = lazy(() => import('@/pages/Users'))
+const Orders = lazy(() => import('@/pages/Orders'))
+const Activity = lazy(() => import('@/pages/Activity'))
 
 function App() {
   const LoadingFallback = () => (
@@ -67,41 +70,71 @@ function App() {
                  }
                />
                <Route
-                 path="/patients"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Patients />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/cid"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Cid />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/municipalities"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Municipalities />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
                  path="/file-manager"
                  element={
                    <DashboardLayout>
                      <Suspense fallback={<LoadingFallback />}>
                        <FileManager />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/data-upload"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <DataUpload />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/analytics"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <Analytics />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/reports"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <Reports />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/users"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <Users />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/orders"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <Orders />
+                     </Suspense>
+                   </DashboardLayout>
+                 }
+               />
+               <Route
+                 path="/activity"
+                 element={
+                   <DashboardLayout>
+                     <Suspense fallback={<LoadingFallback />}>
+                       <Activity />
                      </Suspense>
                    </DashboardLayout>
                  }

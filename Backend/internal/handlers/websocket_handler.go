@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -217,6 +218,8 @@ func (h *WebSocketHandler) handleUploadComplete(conn *Connection, msg *Message) 
 		return
 	}
 
+	log.Printf("Upload recebido - Arquivo: %s, Tipo: %s, Chunks: %d", uploadMsg.FileName, uploadMsg.FileType, len(uploadMsg.Chunks))
+
 	// Reconstituir dados do arquivo
 	csvData, err := h.reconstructFile(uploadMsg.Chunks)
 	if err != nil {
@@ -225,6 +228,7 @@ func (h *WebSocketHandler) handleUploadComplete(conn *Connection, msg *Message) 
 	}
 
 	// Processar baseado no tipo de arquivo
+	log.Printf("Processando arquivo do tipo: %s", uploadMsg.FileType)
 	err = h.processUploadedData(msg.SessionID, uploadMsg.FileType, csvData)
 	if err != nil {
 		h.sendError(conn, "Failed to process data: "+err.Error())
@@ -293,6 +297,8 @@ func (h *WebSocketHandler) reconstructFile(chunks []ChunkMessage) (string, error
 		return "", fmt.Errorf("no chunks provided")
 	}
 
+	log.Printf("Reconstruindo arquivo de %d chunks", len(chunks))
+
 	// Ordenar chunks por índice
 	sortedChunks := make([]string, chunks[0].Total)
 	for _, chunk := range chunks {
@@ -302,13 +308,33 @@ func (h *WebSocketHandler) reconstructFile(chunks []ChunkMessage) (string, error
 		sortedChunks[chunk.Index] = chunk.Data
 	}
 
-	// Concatenar dados
-	var result string
+	// Concatenar dados base64
+	var base64Data string
 	for _, data := range sortedChunks {
-		result += data
+		base64Data += data
 	}
 
-	return result, nil
+	log.Printf("Tamanho do base64 concatenado: %d bytes", len(base64Data))
+
+	// Decodificar base64 para obter o conteúdo real do CSV
+	csvBytes, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64: %v", err)
+	}
+
+	csvContent := string(csvBytes)
+	log.Printf("Arquivo CSV decodificado com sucesso, tamanho: %d bytes", len(csvContent))
+	log.Printf("Primeiras 200 caracteres do CSV: %s", csvContent[:min(200, len(csvContent))])
+
+	return csvContent, nil
+}
+
+// Helper function para min
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (h *WebSocketHandler) processUploadedData(sessionID, fileType, csvData string) error {
@@ -327,14 +353,34 @@ func (h *WebSocketHandler) processUploadedData(sessionID, fileType, csvData stri
 		batchSize = 100 // Default
 	}
 
-	// Aqui você implementaria o parsing específico baseado no tipo
-	// Por enquanto, vou criar um exemplo para municipios
-	switch fileType {
+	// Processar baseado no tipo de arquivo
+	log.Printf("Switch case - tipo recebido: '%s' (length: %d)", fileType, len(fileType))
+
+	// Normalizar o tipo para lowercase e remover espaços
+	normalizedType := strings.ToLower(strings.TrimSpace(fileType))
+	log.Printf("Tipo normalizado: '%s'", normalizedType)
+
+	switch normalizedType {
 	case "municipios":
+		log.Printf("Processando como MUNICIPIOS")
 		return h.processMunicipios(sessionID, csvData, batchSize)
 	case "medicos":
+		log.Printf("Processando como MEDICOS")
 		return h.processMedicos(sessionID, csvData, batchSize)
+	case "estados":
+		log.Printf("Processando como ESTADOS")
+		return h.processEstados(sessionID, csvData, batchSize)
+	case "hospitais":
+		log.Printf("Processando como HOSPITAIS")
+		return h.processHospitais(sessionID, csvData, batchSize)
+	case "pacientes":
+		log.Printf("Processando como PACIENTES")
+		return h.processPacientes(sessionID, csvData, batchSize)
+	case "cid10":
+		log.Printf("Processando como CID10")
+		return h.processCID10(sessionID, csvData, batchSize)
 	default:
+		log.Printf("ERRO: Tipo não reconhecido: '%s'", fileType)
 		return fmt.Errorf("unsupported file type: %s", fileType)
 	}
 }
@@ -404,7 +450,61 @@ func (h *WebSocketHandler) processMunicipios(sessionID, csvData string, batchSiz
 }
 
 func (h *WebSocketHandler) processMedicos(sessionID, csvData string, batchSize int) error {
-	// Similar ao processMunicipios
+	medicos, err := h.parseCSVMedicosFromString(csvData)
+	if err != nil {
+		return fmt.Errorf("failed to parse CSV: %v", err)
+	}
+
+	if len(medicos) == 0 {
+		return fmt.Errorf("no valid doctors found in CSV")
+	}
+
+	totalItems := len(medicos)
+	totalBatches := (totalItems + batchSize - 1) / batchSize
+
+	log.Printf("Processing %d doctors in %d batches for session %s", totalItems, totalBatches, sessionID)
+
+	for i := 0; i < totalBatches; i++ {
+		start := i * batchSize
+		end := start + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batchMedicos := medicos[start:end]
+
+		jobID := uuid.New().String()
+		job := &services.Job{
+			ID:           jobID,
+			Type:         "medicos",
+			Status:       services.JobStatusPending,
+			TotalItems:   len(batchMedicos),
+			CreatedAt:    time.Now(),
+			SessionID:    sessionID,
+		}
+
+		batchDataBytes, err := json.Marshal(batchMedicos)
+		if err != nil {
+			return fmt.Errorf("failed to marshal batch data: %v", err)
+		}
+
+		batchData := services.BatchData{
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
+			Data:         batchDataBytes,
+		}
+
+		data, _ := json.Marshal(batchData)
+		job.Data = data
+
+		err = h.redisService.EnqueueJob(job)
+		if err != nil {
+			return fmt.Errorf("failed to enqueue job: %v", err)
+		}
+
+		log.Printf("Enqueued batch %d/%d with %d doctors", i+1, totalBatches, len(batchMedicos))
+	}
+
 	return nil
 }
 
@@ -479,6 +579,248 @@ func (h *WebSocketHandler) parseCSVMunicipiosFromString(csvData string) ([]domai
 	}
 
 	return municipios, nil
+}
+
+// parseCSVMedicosFromString parses CSV data from string
+func (h *WebSocketHandler) parseCSVMedicosFromString(csvData string) ([]domain.Medico, error) {
+	reader := csv.NewReader(strings.NewReader(csvData))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+
+	headers, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(headers) == 0 {
+		return nil, fmt.Errorf("empty CSV data")
+	}
+
+	log.Printf("CSV headers para médicos: %v", headers[0])
+
+	headerMap := make(map[string]int)
+	for i, header := range headers[0] {
+		cleanHeader := strings.ToLower(strings.TrimSpace(header))
+		headerMap[cleanHeader] = i
+	}
+
+	var medicos []domain.Medico
+
+	for i := 1; i < len(headers); i++ {
+		record := headers[i]
+		medico := domain.Medico{}
+
+		// Múltiplas variações para nome
+		nomeColumns := []string{"nome_completo", "nome", "name", "medico_nome", "doctor_name", "full_name"}
+		for _, col := range nomeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				medico.Nome = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Múltiplas variações para especialidade
+		especialidadeColumns := []string{"especialidade", "specialty", "specialism", "area", "categoria"}
+		for _, col := range especialidadeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				medico.Especialidade = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Múltiplas variações para código/cidade (usar cidade como fallback para município)
+		municipioColumns := []string{"codigo", "cod_municipio", "codigo_municipio", "municipio_id", "cidade", "city", "city_code", "municipality_code"}
+		for _, col := range municipioColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				medico.CodMunicipio = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Log detalhado do parsing
+		log.Printf("Registro %d - Nome: '%s', Especialidade: '%s', CodMunicipio: '%s'", i, medico.Nome, medico.Especialidade, medico.CodMunicipio)
+
+		// Só adicionar se tiver pelo menos nome
+		if medico.Nome != "" {
+			medico.UUID = uuid.New()
+			medicos = append(medicos, medico)
+			log.Printf("✓ Médico %d adicionado: %s", i, medico.Nome)
+		} else {
+			log.Printf("✗ Médico %d rejeitado - nome vazio", i)
+		}
+	}
+
+	log.Printf("Total de médicos parseados: %d", len(medicos))
+	return medicos, nil
+}
+
+// processEstados processa dados de estados
+func (h *WebSocketHandler) processEstados(sessionID, csvData string, batchSize int) error {
+	estados, err := h.parseCSVEstadosFromString(csvData)
+	if err != nil {
+		return fmt.Errorf("failed to parse CSV: %v", err)
+	}
+
+	if len(estados) == 0 {
+		return fmt.Errorf("no valid states found in CSV")
+	}
+
+	totalItems := len(estados)
+	totalBatches := (totalItems + batchSize - 1) / batchSize
+
+	log.Printf("Processing %d states in %d batches for session %s", totalItems, totalBatches, sessionID)
+
+	for i := 0; i < totalBatches; i++ {
+		start := i * batchSize
+		end := start + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batchEstados := estados[start:end]
+
+		jobID := uuid.New().String()
+		job := &services.Job{
+			ID:           jobID,
+			Type:         "estados",
+			Status:       services.JobStatusPending,
+			TotalItems:   len(batchEstados),
+			CreatedAt:    time.Now(),
+			SessionID:    sessionID,
+		}
+
+		batchDataBytes, err := json.Marshal(batchEstados)
+		if err != nil {
+			return fmt.Errorf("failed to marshal batch data: %v", err)
+		}
+
+		batchData := services.BatchData{
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
+			Data:         batchDataBytes,
+		}
+
+		data, _ := json.Marshal(batchData)
+		job.Data = data
+
+		err = h.redisService.EnqueueJob(job)
+		if err != nil {
+			return fmt.Errorf("failed to enqueue job: %v", err)
+		}
+
+		log.Printf("Enqueued batch %d/%d with %d states", i+1, totalBatches, len(batchEstados))
+	}
+
+	return nil
+}
+
+// parseCSVEstadosFromString parses CSV data from string
+func (h *WebSocketHandler) parseCSVEstadosFromString(csvData string) ([]domain.Estado, error) {
+	reader := csv.NewReader(strings.NewReader(csvData))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+
+	headers, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(headers) == 0 {
+		return nil, fmt.Errorf("empty CSV data")
+	}
+
+	// Log dos cabeçalhos para debug
+	log.Printf("CSV headers encontrados: %v", headers[0])
+
+	headerMap := make(map[string]int)
+	for i, header := range headers[0] {
+		cleanHeader := strings.ToLower(strings.TrimSpace(header))
+		headerMap[cleanHeader] = i
+		log.Printf("Header %d: '%s' -> '%s'", i, header, cleanHeader)
+	}
+
+	var estados []domain.Estado
+
+	for i := 1; i < len(headers); i++ {
+		record := headers[i]
+		estado := domain.Estado{}
+
+		// Tentar múltiplas variações dos nomes de colunas
+		codigoColumns := []string{"codigo", "cod", "code", "id", "estado_id", "uf"}
+		for _, col := range codigoColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				estado.Codigo = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		ufColumns := []string{"unidade_federativa", "uf", "sigla", "estado", "state"}
+		for _, col := range ufColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				estado.UnidadeFederativa = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		nomeColumns := []string{"nome", "name", "estado_nome", "estado", "state_name"}
+		for _, col := range nomeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				estado.Nome = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		regiaoColumns := []string{"regiao", "region", "macroregiao", "macro_regiao"}
+		for _, col := range regiaoColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				estado.Regiao = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		latColumns := []string{"latitude", "lat", "latitude_decimal"}
+		for _, col := range latColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				estado.Latitude = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		lngColumns := []string{"longitude", "lng", "lon", "longitude_decimal"}
+		for _, col := range lngColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				estado.Longitude = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Log do registro parseado para debug
+		log.Printf("Registro %d parseado: Codigo='%s', Nome='%s', UF='%s'", i, estado.Codigo, estado.Nome, estado.UnidadeFederativa)
+
+		// Adicionar se tiver pelo menos um identificador (código, UF ou nome)
+		if estado.Codigo != "" || estado.UnidadeFederativa != "" || estado.Nome != "" {
+			estados = append(estados, estado)
+		}
+	}
+
+	log.Printf("Total de estados parseados: %d", len(estados))
+	return estados, nil
+}
+
+// Placeholder implementations for other types
+func (h *WebSocketHandler) processHospitais(sessionID, csvData string, batchSize int) error {
+	// TODO: Implementar quando necessário
+	return fmt.Errorf("hospital processing not implemented yet")
+}
+
+func (h *WebSocketHandler) processPacientes(sessionID, csvData string, batchSize int) error {
+	// TODO: Implementar quando necessário
+	return fmt.Errorf("patient processing not implemented yet")
+}
+
+func (h *WebSocketHandler) processCID10(sessionID, csvData string, batchSize int) error {
+	// TODO: Implementar quando necessário
+	return fmt.Errorf("CID10 processing not implemented yet")
 }
 
 func (h *WebSocketHandler) sendMessage(conn *Connection, msg *Message) {

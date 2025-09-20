@@ -3,9 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { 
-  Upload, 
-  FileText, 
+import {
+  Upload,
+  FileText,
   FolderOpen,
   Plus,
   Trash2,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { FileDetector, formatFileSize } from '@/lib/file-detector'
 import type { FileTypeInfo } from '@/lib/file-detector'
+import { FileUploader } from '@/components/FileUploader'
 
 interface FileItem {
   id: string
@@ -51,6 +52,7 @@ export default function FileManager() {
   const [selectedCategory, setSelectedCategory] = useState('Hospitais')
   const [isDragOver, setIsDragOver] = useState(false)
   const [showStats, setShowStats] = useState(false)
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const getFileIcon = (fileType: FileTypeInfo) => {
@@ -196,6 +198,31 @@ export default function FileManager() {
 
   const stats = getStats()
 
+  // Callbacks para o FileUploader
+  const handleUploadComplete = (fileType: string, fileName: string) => {
+    setUploadMessage(`✅ Arquivo ${fileName} (${fileType}) enviado com sucesso!`)
+    setTimeout(() => setUploadMessage(null), 5000)
+
+    // Adicionar arquivo à lista como processado
+    const newFile: FileItem = {
+      id: `ws-file-${Date.now()}`,
+      name: fileName,
+      size: 0, // Tamanho não conhecido via WebSocket
+      type: 'application/csv',
+      category: fileType.charAt(0).toUpperCase() + fileType.slice(1),
+      uploadDate: new Date(),
+      status: 'processed',
+      progress: 100,
+      fileType: { type: 'csv', extension: 'csv', mimeType: 'text/csv', description: 'CSV File' }
+    }
+    setFiles(prev => [...prev, newFile])
+  }
+
+  const handleUploadError = (error: string) => {
+    setUploadMessage(`❌ Erro no upload: ${error}`)
+    setTimeout(() => setUploadMessage(null), 5000)
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -281,12 +308,27 @@ export default function FileManager() {
         </div>
       )}
 
-      {/* Área de Upload */}
+      {/* Mensagem de Upload */}
+      {uploadMessage && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="pt-6">
+            <p className="text-center text-green-800">{uploadMessage}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Componente de Upload WebSocket */}
+      <FileUploader
+        onUploadComplete={handleUploadComplete}
+        onError={handleUploadError}
+      />
+
+      {/* Área de Upload Tradicional (mantida para outros tipos de arquivo) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload de Arquivos
+            Upload Tradicional (Outros Arquivos)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -309,10 +351,10 @@ export default function FileManager() {
             </div>
 
             {/* Área de Upload com Drag & Drop */}
-            <div 
+            <div
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                isDragOver 
-                  ? 'border-primary bg-primary/5' 
+                isDragOver
+                  ? 'border-primary bg-primary/5'
                   : 'border-muted-foreground/25 hover:border-muted-foreground/50'
               }`}
               onDragOver={handleDragOver}
@@ -321,20 +363,17 @@ export default function FileManager() {
             >
               <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
               <h3 className="text-lg font-medium mb-2">
-                {isDragOver ? 'Solte os arquivos aqui' : 'Faça upload de arquivos'}
+                {isDragOver ? 'Solte os arquivos aqui' : 'Upload de arquivos não-CSV'}
               </h3>
               <p className="text-muted-foreground mb-2">
-                {isDragOver 
+                {isDragOver
                   ? 'Arraste e solte os arquivos na categoria selecionada'
-                  : `Arraste arquivos aqui ou selecione para a categoria: ${selectedCategory}`
+                  : `Para arquivos XML, JSON, PDF, TXT na categoria: ${selectedCategory}`
                 }
               </p>
                <p className="text-xs text-muted-foreground mb-4">
-                 Tipos suportados: XML, JSON, PDF, CSV, TXT • 
-                 {selectedCategory === 'Pacientes' 
-                   ? 'Sem limite de tamanho - processamento em chunks inteligentes'
-                   : 'Detecção automática de tipo e envio para backend'
-                 }
+                 Tipos suportados: XML, JSON, PDF, TXT •
+                 Para arquivos CSV use o upload WebSocket acima
                </p>
               <div className="flex items-center justify-center gap-4">
                 <Button onClick={() => fileInputRef.current?.click()}>
@@ -345,7 +384,7 @@ export default function FileManager() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="*/*"
+                accept=".xml,.json,.pdf,.txt"
                 multiple
                 onChange={handleFileUpload}
                 className="hidden"
