@@ -12,8 +12,6 @@ import {
 } from "lucide-react"
 import { 
   MapPin, 
-  Users, 
-  Building2, 
   Search, 
   Filter,
   Download,
@@ -21,9 +19,7 @@ import {
   FileText,
   FolderOpen,
   X,
-  Globe,
-  TrendingUp,
-  Activity
+  Globe
 } from "lucide-react"
 import {
   Command,
@@ -42,23 +38,17 @@ import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface State {
-  codigo: string
+  codigo_uf: string
+  uf: string
   nome: string
-  sigla: string
+  latitude: number
+  longitude: number
   regiao: string
-  populacao: number
-  area_km2: number
-  capital: string
-  governador: string
-  pib_per_capita: number
-  municipios: number
 }
 
 interface FilterState {
   regiao: string
   search: string
-  populacao_min: string
-  populacao_max: string
 }
 
 export default function States() {
@@ -71,21 +61,40 @@ export default function States() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
     regiao: '',
-    search: '',
-    populacao_min: '',
-    populacao_max: ''
+    search: ''
   })
   const [openRegion, setOpenRegion] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage] = useState(6) // 6 estados por página
+  const [itemsPerPage] = useState(6)
 
 
-  // Regiões brasileiras (será preenchida dinamicamente com os dados)
   const [regions, setRegions] = useState<string[]>([])
 
+  // Carregar dados iniciais dos estados
+  useEffect(() => {
+    const loadStates = async () => {
+      try {
+        const response = await api.states.getAll()
+        const data = response.data as State[]
+        setStates(data)
+        setFilteredStates(data)
+        
+        // Extrair regiões únicas dos dados
+        const uniqueRegions = [...new Set(data.map((s: State) => s.regiao))] as string[]
+        setRegions(uniqueRegions)
+        
+        console.log('Estados carregados com sucesso:', data.length)
+      } catch (error) {
+        console.error('Erro ao carregar estados:', error)
+        // Se houver erro, manter arrays vazios para mostrar área de upload
+      }
+    }
+    
+    loadStates()
+  }, [])
 
   // Função para processar arquivo (usada tanto para input quanto drag&drop)
   const processFile = async (file: File) => {
@@ -161,19 +170,26 @@ export default function States() {
     }
   }
 
-  // Aplicar filtros - apenas formatação de texto (lógica de filtro será feita pelo backend)
+  // Aplicar filtros
   useEffect(() => {
-    // Se não há filtros ativos, mostra todos os estados
-    const hasActiveFilters = filters.regiao || filters.search || filters.populacao_min || filters.populacao_max
-    
-    if (!hasActiveFilters) {
-      setFilteredStates(states)
-    } else {
-      // Quando há filtros, o backend será responsável pela lógica de filtro
-      // Por enquanto, mostra todos os estados (será substituído pela resposta do backend)
-      setFilteredStates(states)
+    let filtered = states
+
+    // Filtro por região
+    if (filters.regiao) {
+      filtered = filtered.filter(state => state.regiao === filters.regiao)
     }
-    
+
+    // Filtro por busca (nome, UF ou código)
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase()
+      filtered = filtered.filter(state => 
+        state.nome.toLowerCase().includes(searchLower) ||
+        state.uf.toLowerCase().includes(searchLower) ||
+        state.codigo_uf.includes(searchLower)
+      )
+    }
+
+    setFilteredStates(filtered)
     setCurrentPage(1) // Reset para primeira página quando filtros mudam
   }, [states, filters])
 
@@ -195,28 +211,14 @@ export default function States() {
   const clearFilters = () => {
     setFilters({
       regiao: '',
-      search: '',
-      populacao_min: '',
-      populacao_max: ''
+      search: ''
     })
-    // Garantir que todos os estados sejam exibidos quando filtros são limpos
-    setFilteredStates(states)
     setCurrentPage(1)
   }
 
-  // Função para formatar números
-  const formatNumber = (num: number) => {
-    return num.toLocaleString('pt-BR')
-  }
-
-  // Função para formatar área
-  const formatArea = (area: number) => {
-    return `${formatNumber(area)} km²`
-  }
-
-  // Função para formatar PIB per capita
-  const formatPIB = (pib: number) => {
-    return `R$ ${formatNumber(pib)}`
+  // Função para formatar coordenadas
+  const formatCoordinate = (coord: number) => {
+    return coord.toFixed(6)
   }
 
   return (
@@ -359,33 +361,16 @@ export default function States() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              População Total
+              Estados por Região
             </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Globe className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatNumber(states.reduce((sum, s) => sum + s.populacao, 0))}
+              {regions.length}
             </div>
             <p className="text-xs text-muted-foreground">
-              Habitantes
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Área Total
-            </CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatNumber(Math.round(states.reduce((sum, s) => sum + s.area_km2, 0)))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              km²
+              Regiões
             </p>
           </CardContent>
         </Card>
@@ -493,29 +478,6 @@ export default function States() {
                      <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
                    </div>
 
-                   {/* Filtro por População Mínima */}
-                   <div className="space-y-2">
-                     <label className="text-sm font-medium">População Mínima</label>
-                     <Input
-                       placeholder="Ex: 1000000"
-                       value={filters.populacao_min}
-                       onChange={(e) => setFilters(prev => ({ ...prev, populacao_min: e.target.value }))}
-                       type="number"
-                     />
-                     <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
-                   </div>
-
-                   {/* Filtro por População Máxima */}
-                   <div className="space-y-2">
-                     <label className="text-sm font-medium">População Máxima</label>
-                     <Input
-                       placeholder="Ex: 50000000"
-                       value={filters.populacao_max}
-                       onChange={(e) => setFilters(prev => ({ ...prev, populacao_max: e.target.value }))}
-                       type="number"
-                     />
-                     <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
-                   </div>
 
             {/* Contador de resultados */}
             <div className="space-y-2">
@@ -564,7 +526,7 @@ export default function States() {
               {/* Grid de estados paginados */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {currentStates.map((state) => (
-                  <Card key={state.codigo} className="hover:shadow-md transition-shadow">
+                  <Card key={state.codigo_uf} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-start space-x-3">
                         <div className="flex-shrink-0">
@@ -580,30 +542,26 @@ export default function States() {
                               <span>{state.regiao}</span>
                             </div>
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <Users className="h-4 w-4" />
-                              <span>{formatNumber(state.populacao)} hab.</span>
+                              <span className="font-medium">UF:</span>
+                              <span>{state.uf}</span>
                             </div>
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <Building2 className="h-4 w-4" />
-                              <span>{formatArea(state.area_km2)}</span>
+                              <span className="font-medium">Código:</span>
+                              <span>{state.codigo_uf}</span>
                             </div>
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <span className="font-medium">Capital:</span>
-                              <span>{state.capital}</span>
+                              <span className="font-medium">Latitude:</span>
+                              <span>{formatCoordinate(state.latitude)}</span>
                             </div>
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <TrendingUp className="h-4 w-4" />
-                              <span>PIB: {formatPIB(state.pib_per_capita)}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <Activity className="h-4 w-4" />
-                              <span>{state.municipios} municípios</span>
+                              <span className="font-medium">Longitude:</span>
+                              <span>{formatCoordinate(state.longitude)}</span>
                             </div>
                           </div>
                           <div className="mt-3 pt-3 border-t">
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-muted-foreground">
-                                {state.sigla} • Governador: {state.governador}
+                                {state.uf} • {state.codigo_uf}
                               </span>
                               <Button variant="outline" size="sm">
                                 Ver Detalhes
