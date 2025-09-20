@@ -11,9 +11,8 @@ import {
   ChevronsRight 
 } from "lucide-react"
 import { 
-  Building2, 
+  User, 
   MapPin, 
-  Users, 
   Stethoscope, 
   Search, 
   Filter,
@@ -39,35 +38,30 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface Hospital {
+interface Doctor {
   codigo: string
-  nome: string
-  cidade: string
-  bairro: string
-  especialidades: string[]
-  leitos_totais: number
-  colaboradores: number
+  nome_completo: string
+  especialidade: string
+  cidade: number
 }
 
 interface FilterState {
   cidade: string
-  bairro: string
-  specialty: string
+  especialidade: string
   search: string
 }
 
-export default function Hospitals() {
+export default function Doctors() {
   const navigate = useNavigate()
-  const [hospitals, setHospitals] = useState<Hospital[]>([])
-  const [filteredHospitals, setFilteredHospitals] = useState<Hospital[]>([])
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([])
   const [loading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
     cidade: '',
-    bairro: '',
-    specialty: '',
+    especialidade: '',
     search: ''
   })
   const [openSpecialty, setOpenSpecialty] = useState(false)
@@ -75,120 +69,84 @@ export default function Hospitals() {
 
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage] = useState(6) // 6 hospitais por página
+  const [itemsPerPage] = useState(6) // 6 médicos por página
 
   // Configuração da API - substitua pela sua URL
   const API_URL = 'https://sua-api.com/upload'
 
   // Dados mockados para teste
-  const mockHospitals: Hospital[] = [
+  const mockDoctors: Doctor[] = [
     {
-      codigo: "H001",
-      nome: "Hospital São Paulo",
-      cidade: "São Paulo",
-      bairro: "Centro",
-      especialidades: ["Cardiologia", "Neurologia", "Pediatria"],
-      leitos_totais: 450,
-      colaboradores: 320
+      codigo: "M001",
+      nome_completo: "Dr. João Silva Santos",
+      especialidade: "Cardiologia",
+      cidade: 1
     },
     {
-      codigo: "H002", 
-      nome: "Hospital das Clínicas",
-      cidade: "São Paulo",
-      bairro: "Cerqueira César",
-      especialidades: ["Cardiologia", "Oncologia", "Transplantes"],
-      leitos_totais: 1200,
-      colaboradores: 850
+      codigo: "M002", 
+      nome_completo: "Dra. Maria Oliveira Costa",
+      especialidade: "Neurologia",
+      cidade: 1
     },
     {
-      codigo: "H003",
-      nome: "Hospital Sírio-Libanês",
-      cidade: "São Paulo", 
-      bairro: "Bela Vista",
-      especialidades: ["Cardiologia", "Neurologia", "Ortopedia"],
-      leitos_totais: 350,
-      colaboradores: 280
+      codigo: "M003",
+      nome_completo: "Dr. Carlos Eduardo Ferreira",
+      especialidade: "Pediatria",
+      cidade: 2
     },
     {
-      codigo: "H004",
-      nome: "Hospital Copa D'Or",
-      cidade: "Rio de Janeiro",
-      bairro: "Copacabana",
-      especialidades: ["Cardiologia", "Neurologia", "Pediatria"],
-      leitos_totais: 280,
-      colaboradores: 220
+      codigo: "M004",
+      nome_completo: "Dra. Ana Paula Rodrigues",
+      especialidade: "Cardiologia",
+      cidade: 2
     },
     {
-      codigo: "H005",
-      nome: "Hospital Albert Einstein",
-      cidade: "São Paulo",
-      bairro: "Morumbi",
-      especialidades: ["Cardiologia", "Oncologia", "Neurologia", "Pediatria"],
-      leitos_totais: 600,
-      colaboradores: 450
+      codigo: "M005",
+      nome_completo: "Dr. Roberto Almeida Lima",
+      especialidade: "Ortopedia",
+      cidade: 1
     },
     {
-      codigo: "H006",
-      nome: "Hospital Oswaldo Cruz",
-      cidade: "São Paulo",
-      bairro: "Paraíso",
-      especialidades: ["Cardiologia", "Neurologia"],
-      leitos_totais: 180,
-      colaboradores: 150
+      codigo: "M006",
+      nome_completo: "Dra. Fernanda Souza Martins",
+      especialidade: "Neurologia",
+      cidade: 3
     },
     {
-      codigo: "H007",
-      nome: "Hospital Samaritano",
-      cidade: "Rio de Janeiro",
-      bairro: "Botafogo",
-      especialidades: ["Cardiologia", "Ortopedia", "Pediatria"],
-      leitos_totais: 220,
-      colaboradores: 180
+      codigo: "M007",
+      nome_completo: "Dr. Pedro Henrique Gomes",
+      especialidade: "Pediatria",
+      cidade: 1
     },
     {
-      codigo: "H008",
-      nome: "Hospital Beneficência Portuguesa",
-      cidade: "São Paulo",
-      bairro: "Vila Clementino",
-      especialidades: ["Cardiologia", "Neurologia", "Oncologia"],
-      leitos_totais: 400,
-      colaboradores: 320
+      codigo: "M008",
+      nome_completo: "Dra. Juliana Mendes Pereira",
+      especialidade: "Cardiologia",
+      cidade: 2
     },
     {
-      codigo: "H009",
-      nome: "Hospital Pró-Cardíaco",
-      cidade: "Rio de Janeiro",
-      bairro: "Botafogo",
-      especialidades: ["Cardiologia"],
-      leitos_totais: 150,
-      colaboradores: 120
+      codigo: "M009",
+      nome_completo: "Dr. Rafael Barbosa Silva",
+      especialidade: "Ortopedia",
+      cidade: 3
     },
     {
-      codigo: "H010",
-      nome: "Hospital Santa Catarina",
-      cidade: "São Paulo",
-      bairro: "Vila Mariana",
-      especialidades: ["Cardiologia", "Neurologia", "Pediatria", "Ortopedia"],
-      leitos_totais: 320,
-      colaboradores: 250
+      codigo: "M010",
+      nome_completo: "Dra. Camila Santos Oliveira",
+      especialidade: "Neurologia",
+      cidade: 1
     },
     {
-      codigo: "H011",
-      nome: "Hospital São Luiz",
-      cidade: "São Paulo",
-      bairro: "Itaim Bibi",
-      especialidades: ["Cardiologia", "Neurologia"],
-      leitos_totais: 200,
-      colaboradores: 160
+      codigo: "M011",
+      nome_completo: "Dr. Lucas Ferreira Costa",
+      especialidade: "Pediatria",
+      cidade: 2
     },
     {
-      codigo: "H012",
-      nome: "Hospital Barra D'Or",
-      cidade: "Rio de Janeiro",
-      bairro: "Barra da Tijuca",
-      especialidades: ["Cardiologia", "Neurologia", "Pediatria"],
-      leitos_totais: 180,
-      colaboradores: 140
+      codigo: "M012",
+      nome_completo: "Dra. Beatriz Alves Rodrigues",
+      especialidade: "Cardiologia",
+      cidade: 3
     }
   ]
 
@@ -197,11 +155,11 @@ export default function Hospitals() {
 
   // Função para carregar dados mockados (para teste)
   const loadMockData = () => {
-    setHospitals(mockHospitals)
-    setFilteredHospitals(mockHospitals)
+    setDoctors(mockDoctors)
+    setFilteredDoctors(mockDoctors)
     
     // Extrair especialidades únicas dos dados mockados
-    const uniqueSpecialties = [...new Set(mockHospitals.flatMap(h => h.especialidades))]
+    const uniqueSpecialties = [...new Set(mockDoctors.map(d => d.especialidade))]
     setSpecialties(uniqueSpecialties)
   }
 
@@ -226,11 +184,11 @@ export default function Hospitals() {
       }
       
       const data = await response.json()
-      setHospitals(data)
-      setFilteredHospitals(data)
+      setDoctors(data)
+      setFilteredDoctors(data)
       
       // Extrair especialidades únicas dos dados
-      const uniqueSpecialties = [...new Set(data.flatMap((h: Hospital) => h.especialidades))] as string[]
+      const uniqueSpecialties = [...new Set(data.map((d: Doctor) => d.especialidade))] as string[]
       setSpecialties(uniqueSpecialties)
       
     } catch (error) {
@@ -278,8 +236,8 @@ export default function Hospitals() {
   // Função para remover arquivo
   const removeFile = () => {
     setUploadedFile(null)
-    setHospitals([])
-    setFilteredHospitals([])
+    setDoctors([])
+    setFilteredDoctors([])
     setSpecialties([])
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -288,25 +246,25 @@ export default function Hospitals() {
 
   // Aplicar filtros - apenas formatação de texto (lógica de filtro será feita pelo backend)
   useEffect(() => {
-    // Se não há filtros ativos, mostra todos os hospitais
-    const hasActiveFilters = filters.cidade || filters.bairro || filters.specialty || filters.search
+    // Se não há filtros ativos, mostra todos os médicos
+    const hasActiveFilters = filters.cidade || filters.especialidade || filters.search
     
     if (!hasActiveFilters) {
-      setFilteredHospitals(hospitals)
+      setFilteredDoctors(doctors)
     } else {
       // Quando há filtros, o backend será responsável pela lógica de filtro
-      // Por enquanto, mostra todos os hospitais (será substituído pela resposta do backend)
-      setFilteredHospitals(hospitals)
+      // Por enquanto, mostra todos os médicos (será substituído pela resposta do backend)
+      setFilteredDoctors(doctors)
     }
     
     setCurrentPage(1) // Reset para primeira página quando filtros mudam
-  }, [hospitals, filters])
+  }, [doctors, filters])
 
   // Funções de paginação
-  const totalPages = Math.ceil(filteredHospitals.length / itemsPerPage)
+  const totalPages = Math.ceil(filteredDoctors.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const currentHospitals = filteredHospitals.slice(startIndex, endIndex)
+  const currentDoctors = filteredDoctors.slice(startIndex, endIndex)
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)))
@@ -320,20 +278,30 @@ export default function Hospitals() {
   const clearFilters = () => {
     setFilters({
       cidade: '',
-      bairro: '',
-      specialty: '',
+      especialidade: '',
       search: ''
     })
-    // Garantir que todos os hospitais sejam exibidos quando filtros são limpos
-    setFilteredHospitals(hospitals)
+    // Garantir que todos os médicos sejam exibidos quando filtros são limpos
+    setFilteredDoctors(doctors)
     setCurrentPage(1)
   }
 
+  // Função para obter nome da cidade baseado no código
+  const getCityName = (cityCode: number) => {
+    const cityNames: { [key: number]: string } = {
+      1: "São Paulo",
+      2: "Rio de Janeiro", 
+      3: "Belo Horizonte",
+      4: "Salvador",
+      5: "Brasília"
+    }
+    return cityNames[cityCode] || `Cidade ${cityCode}`
+  }
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Hospitais</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Médicos</h2>
         <div className="flex items-center space-x-2">
           <Button variant="outline" size="sm" onClick={loadMockData}>
             <FileText className="mr-2 h-4 w-4" />
@@ -343,7 +311,7 @@ export default function Hospitals() {
             <FolderOpen className="mr-2 h-4 w-4" />
             Gerenciar Arquivos
           </Button>
-          <Button variant="outline" size="sm" disabled={hospitals.length === 0}>
+          <Button variant="outline" size="sm" disabled={doctors.length === 0}>
             <Download className="mr-2 h-4 w-4" />
             Exportar Dados
           </Button>
@@ -351,12 +319,12 @@ export default function Hospitals() {
       </div>
 
       {/* Área de Upload - só aparece quando não há dados carregados */}
-      {hospitals.length === 0 && (
+      {doctors.length === 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
-              Upload de Dados dos Hospitais
+              Upload de Dados dos Médicos
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -373,12 +341,12 @@ export default function Hospitals() {
               >
                 <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
                 <h3 className="text-lg font-medium mb-2">
-                  {isDragOver ? 'Solte o arquivo aqui' : 'Faça upload do arquivo de hospitais'}
+                  {isDragOver ? 'Solte o arquivo aqui' : 'Faça upload do arquivo de médicos'}
                 </h3>
                 <p className="text-muted-foreground mb-4">
                   {isDragOver 
                     ? 'Arraste e solte o arquivo aqui'
-                    : 'Arraste um arquivo aqui ou selecione com os dados dos hospitais (CSV, Excel, etc.)'
+                    : 'Arraste um arquivo aqui ou selecione com os dados dos médicos (CSV, Excel, etc.)'
                   }
                 </p>
                 <div className="flex items-center justify-center gap-4">
@@ -423,14 +391,13 @@ export default function Hospitals() {
         </Card>
       )}
 
-
       {/* Botão para página de upload - só aparece quando há dados carregados */}
-      {hospitals.length > 0 && (
+      {doctors.length > 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
               <p className="text-muted-foreground mb-4">
-                Dados carregados com sucesso! ({hospitals.length} hospitais)
+                Dados carregados com sucesso! ({doctors.length} médicos)
               </p>
               <Button variant="outline" size="sm">
                 <Upload className="mr-2 h-4 w-4" />
@@ -442,19 +409,19 @@ export default function Hospitals() {
       )}
 
       {/* Estatísticas - só aparecem quando há dados carregados */}
-      {hospitals.length > 0 && (
+      {doctors.length > 0 && (
         <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total de Hospitais
+              Total de Médicos
             </CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{hospitals.length}</div>
+            <div className="text-2xl font-bold">{doctors.length}</div>
             <p className="text-xs text-muted-foreground">
-              {filteredHospitals.length} filtrados
+              {filteredDoctors.length} filtrados
             </p>
           </CardContent>
         </Card>
@@ -464,7 +431,7 @@ export default function Hospitals() {
             <CardTitle className="text-sm font-medium">
               Especialidades Únicas
             </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Stethoscope className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -479,16 +446,16 @@ export default function Hospitals() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total de Leitos
+              Cidades Atendidas
             </CardTitle>
-            <Stethoscope className="h-4 w-4 text-muted-foreground" />
+            <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {hospitals.reduce((sum, h) => sum + h.leitos_totais, 0).toLocaleString()}
+              {new Set(doctors.map(d => d.cidade)).size}
             </div>
             <p className="text-xs text-muted-foreground">
-              Capacidade total
+              Cidades diferentes
             </p>
           </CardContent>
         </Card>
@@ -496,16 +463,21 @@ export default function Hospitals() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total de Colaboradores
+              Especialidade Mais Comum
             </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Stethoscope className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {hospitals.reduce((sum, h) => sum + h.colaboradores, 0).toLocaleString()}
+              {specialties.length > 0 ? 
+                specialties.reduce((a, b) => 
+                  doctors.filter(d => d.especialidade === a).length > 
+                  doctors.filter(d => d.especialidade === b).length ? a : b
+                ) : 'N/A'
+              }
             </div>
             <p className="text-xs text-muted-foreground">
-              Médicos e funcionários
+              Mais frequente
             </p>
           </CardContent>
         </Card>
@@ -513,7 +485,7 @@ export default function Hospitals() {
       )}
 
       {/* Filtros - só aparece quando há dados */}
-      {hospitals.length > 0 && (
+      {doctors.length > 0 && (
         <Card>
         <CardHeader>
                  <div className="flex items-center justify-between">
@@ -523,7 +495,7 @@ export default function Hospitals() {
                    </CardTitle>
                    <div className="flex items-center space-x-2">
                      <Button variant="outline" size="sm" onClick={() => {
-                       setFilteredHospitals(hospitals)
+                       setFilteredDoctors(doctors)
                        setCurrentPage(1)
                      }}>
                        Ver Todos
@@ -535,7 +507,7 @@ export default function Hospitals() {
                  </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                    {/* Filtro por Cidade - apenas formatação de texto */}
                    <div className="space-y-2">
                      <label className="text-sm font-medium">Cidade</label>
@@ -551,23 +523,9 @@ export default function Hospitals() {
                      <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
                    </div>
 
-                   <div className="space-y-2">
-                     <label className="text-sm font-medium">Bairro</label>
-                     <div className="relative">
-                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                       <Input
-                         placeholder="Buscar bairro..."
-                         value={filters.bairro}
-                         onChange={(e) => setFilters(prev => ({ ...prev, bairro: e.target.value }))}
-                         className="pl-8"
-                       />
-                     </div>
-                     <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
-                   </div>
-
                    {/* Filtro por Nome - apenas formatação de texto */}
                    <div className="space-y-2">
-                     <label className="text-sm font-medium">Nome do Hospital</label>
+                     <label className="text-sm font-medium">Nome do Médico</label>
                      <div className="relative">
                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                        <Input
@@ -591,7 +549,7 @@ export default function Hospitals() {
                     aria-expanded={openSpecialty}
                     className="w-full justify-between"
                   >
-                    {filters.specialty || "Selecionar especialidade..."}
+                    {filters.especialidade || "Selecionar especialidade..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -604,14 +562,14 @@ export default function Hospitals() {
                         <CommandItem
                           value=""
                           onSelect={() => {
-                            setFilters(prev => ({ ...prev, specialty: '' }))
+                            setFilters(prev => ({ ...prev, especialidade: '' }))
                             setOpenSpecialty(false)
                           }}
                         >
                           <Check
                             className={cn(
                               "mr-2 h-4 w-4",
-                              filters.specialty === '' ? "opacity-100" : "opacity-0"
+                              filters.especialidade === '' ? "opacity-100" : "opacity-0"
                             )}
                           />
                           Todas as especialidades
@@ -621,14 +579,14 @@ export default function Hospitals() {
                             key={specialty}
                             value={specialty}
                             onSelect={() => {
-                              setFilters(prev => ({ ...prev, specialty }))
+                              setFilters(prev => ({ ...prev, especialidade: specialty }))
                               setOpenSpecialty(false)
                             }}
                           >
                             <Check
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                filters.specialty === specialty ? "opacity-100" : "opacity-0"
+                                filters.especialidade === specialty ? "opacity-100" : "opacity-0"
                               )}
                             />
                             {specialty}
@@ -646,7 +604,7 @@ export default function Hospitals() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Resultados</label>
               <div className="flex items-center justify-center h-10 px-3 py-2 text-sm border rounded-md bg-muted">
-                {filteredHospitals.length} hospital{filteredHospitals.length !== 1 ? 'is' : ''}
+                {filteredDoctors.length} médico{filteredDoctors.length !== 1 ? 's' : ''}
               </div>
             </div>
           </div>
@@ -654,10 +612,10 @@ export default function Hospitals() {
         </Card>
       )}
 
-      {/* Lista de Hospitais */}
+      {/* Lista de Médicos */}
       <Card>
         <CardHeader>
-          <CardTitle>Hospitais Encontrados</CardTitle>
+          <CardTitle>Médicos Encontrados</CardTitle>
         </CardHeader>
         <CardContent>
           
@@ -665,69 +623,54 @@ export default function Hospitals() {
             <div className="flex items-center justify-center h-32">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-muted-foreground">Carregando hospitais...</p>
+                <p className="text-muted-foreground">Carregando médicos...</p>
               </div>
             </div>
-          ) : hospitals.length === 0 ? (
+          ) : doctors.length === 0 ? (
             <div className="text-center py-8">
-              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">Nenhum hospital carregado</h3>
+              <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">Nenhum médico carregado</h3>
               <p className="text-muted-foreground">
-                Faça upload de um arquivo com os dados dos hospitais para começar.
+                Faça upload de um arquivo com os dados dos médicos para começar.
               </p>
             </div>
-          ) : filteredHospitals.length === 0 ? (
+          ) : filteredDoctors.length === 0 ? (
             <div className="text-center py-8">
-              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">Nenhum hospital encontrado</h3>
+              <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">Nenhum médico encontrado</h3>
               <p className="text-muted-foreground">
-                Tente ajustar os filtros para encontrar hospitais.
+                Tente ajustar os filtros para encontrar médicos.
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Grid de hospitais paginados */}
+              {/* Grid de médicos paginados */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {currentHospitals.map((hospital) => (
-                  <Card key={hospital.codigo} className="hover:shadow-md transition-shadow">
+                {currentDoctors.map((doctor) => (
+                  <Card key={doctor.codigo} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-start space-x-3">
                         <div className="flex-shrink-0">
                           <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                            <Building2 className="h-6 w-6 text-primary" />
+                            <User className="h-6 w-6 text-primary" />
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-semibold truncate">{hospital.nome}</h3>
+                          <h3 className="text-lg font-semibold truncate">{doctor.nome_completo}</h3>
                           <div className="space-y-1 mt-2">
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
                               <MapPin className="h-4 w-4" />
-                              <span>{hospital.cidade}</span>
+                              <span>{getCityName(doctor.cidade)}</span>
                             </div>
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
                               <Stethoscope className="h-4 w-4" />
-                              <span>{hospital.leitos_totais} leitos</span>
+                              <span>{doctor.especialidade}</span>
                             </div>
-                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <Users className="h-4 w-4" />
-                              <span>{hospital.colaboradores} colaboradores</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                              <span className="font-medium">Bairro:</span>
-                              <span>{hospital.bairro}</span>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-1 mt-3">
-                            {hospital.especialidades.map((specialty) => (
-                              <Badge key={specialty} variant="secondary" className="text-xs">
-                                {specialty}
-                              </Badge>
-                            ))}
                           </div>
                           <div className="mt-3 pt-3 border-t">
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-muted-foreground">
-                                Código: {hospital.codigo}
+                                Código: {doctor.codigo}
                               </span>
                               <Button variant="outline" size="sm">
                                 Ver Detalhes
@@ -745,7 +688,7 @@ export default function Hospitals() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-4">
                   <div className="text-sm text-muted-foreground">
-                    Mostrando {startIndex + 1} a {Math.min(endIndex, filteredHospitals.length)} de {filteredHospitals.length} hospitais
+                    Mostrando {startIndex + 1} a {Math.min(endIndex, filteredDoctors.length)} de {filteredDoctors.length} médicos
                   </div>
                   <div className="flex items-center space-x-2">
                     <Button

@@ -1,12 +1,14 @@
-import { 
-  Home, 
-  BarChart3, 
-  Users, 
-  Settings, 
+import {
+  Home,
+  BarChart3,
+  Users,
+  Settings,
   CreditCard,
   Activity,
   TrendingUp,
-  Building2
+  Building2,
+  FolderOpen,
+  Stethoscope
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -18,6 +20,8 @@ export function Sidebar() {
   const navigationItems = [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/hospitals', label: 'Hospitais', icon: Building2 },
+    { path: '/doctors', label: 'Médicos', icon: Stethoscope },
+    { path: '/file-manager', label: 'Gerenciador de Arquivos', icon: FolderOpen },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/users', label: 'Usuários', icon: Users },
     { path: '/orders', label: 'Pedidos', icon: CreditCard },
