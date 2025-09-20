@@ -4,10 +4,18 @@ import (
 	"example.com/m/v2/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"runtime"
+	"sync"
 )
 
 type DataService struct {
 	db *gorm.DB
+}
+
+type BatchResult struct {
+	Inserted int
+	Updated  int
+	Err      error
 }
 
 func NewDataService(db *gorm.DB) *DataService {
@@ -183,6 +191,137 @@ func (s *DataService) UpsertMunicipios(municipios []domain.Municipio) (int, int,
 	return inserted, updated, nil
 }
 
+// UpsertMunicipiosConcurrent - Versão concorrente otimizada para grandes volumes
+func (s *DataService) UpsertMunicipiosConcurrent(municipios []domain.Municipio) (int, int, error) {
+	if len(municipios) == 0 {
+		return 0, 0, nil
+	}
+
+	// Número de workers baseado no número de CPU cores
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 8 {
+		numWorkers = 8 // Limita para não sobrecarregar o banco
+	}
+
+	batchSize := 200
+	batches := make([][]domain.Municipio, 0)
+
+	// Dividir em batches
+	for i := 0; i < len(municipios); i += batchSize {
+		end := i + batchSize
+		if end > len(municipios) {
+			end = len(municipios)
+		}
+		batches = append(batches, municipios[i:end])
+	}
+
+	// Channels para coordenação
+	batchChan := make(chan []domain.Municipio, len(batches))
+	resultChan := make(chan BatchResult, len(batches))
+
+	// Enviar batches para o channel
+	for _, batch := range batches {
+		batchChan <- batch
+	}
+	close(batchChan)
+
+	// Worker function
+	worker := func() {
+		for batch := range batchChan {
+			inserted, updated, err := s.processMunicipioBatch(batch)
+			resultChan <- BatchResult{Inserted: inserted, Updated: updated, Err: err}
+		}
+	}
+
+	// Iniciar workers
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			worker()
+		}()
+	}
+
+	// Aguardar conclusão
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Coletar resultados
+	var totalInserted, totalUpdated int
+	for result := range resultChan {
+		if result.Err != nil {
+			return totalInserted, totalUpdated, result.Err
+		}
+		totalInserted += result.Inserted
+		totalUpdated += result.Updated
+	}
+
+	return totalInserted, totalUpdated, nil
+}
+
+func (s *DataService) processMunicipioBatch(batch []domain.Municipio) (int, int, error) {
+	query := `
+		INSERT INTO municipios (codigo, nome, latitude, longitude, capital, codigo_uf, siafi_id, ddd, fuso_hora, populacao)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (codigo) DO UPDATE SET
+			nome = EXCLUDED.nome,
+			latitude = EXCLUDED.latitude,
+			longitude = EXCLUDED.longitude,
+			capital = EXCLUDED.capital,
+			codigo_uf = EXCLUDED.codigo_uf,
+			siafi_id = EXCLUDED.siafi_id,
+			ddd = EXCLUDED.ddd,
+			fuso_hora = EXCLUDED.fuso_hora,
+			populacao = EXCLUDED.populacao
+	`
+
+	// Contar existentes
+	var existingCodes []string
+	for _, m := range batch {
+		existingCodes = append(existingCodes, m.Codigo)
+	}
+
+	var existingCount int64
+	if err := s.db.Model(&domain.Municipio{}).Where("codigo IN ?", existingCodes).Count(&existingCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	// Executar upsert
+	tx := s.db.Begin()
+	for _, municipio := range batch {
+		if err := tx.Exec(query,
+			municipio.Codigo,
+			municipio.Nome,
+			municipio.Latitude,
+			municipio.Longitude,
+			municipio.Capital,
+			municipio.CodigoUF,
+			municipio.SiafiId,
+			municipio.DDD,
+			municipio.FusoHora,
+			municipio.Populacao,
+		).Error; err != nil {
+			tx.Rollback()
+			return 0, 0, err
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return 0, 0, err
+	}
+
+	inserted := len(batch) - int(existingCount)
+	if inserted < 0 {
+		inserted = 0
+	}
+	updated := int(existingCount)
+
+	return inserted, updated, nil
+}
+
 // Hospital operations
 func (s *DataService) HospitalExists(uuid uuid.UUID) (bool, error) {
 	var count int64
@@ -271,28 +410,189 @@ func (s *DataService) BulkInsertMedicos(medicos []domain.Medico) error {
 }
 
 func (s *DataService) UpsertMedicos(medicos []domain.Medico) (int, int, error) {
+	if len(medicos) == 0 {
+		return 0, 0, nil
+	}
+
+	// Usar PostgreSQL UPSERT com ON CONFLICT para melhor performance
+	query := `
+		INSERT INTO medicos (uuid, nome, especialidade, cod_municipio)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT (uuid) DO UPDATE SET
+			nome = EXCLUDED.nome,
+			especialidade = EXCLUDED.especialidade,
+			cod_municipio = EXCLUDED.cod_municipio
+	`
+
 	var inserted, updated int
 
-	for _, medico := range medicos {
-		exists, err := s.MedicoExists(medico.UUID)
-		if err != nil {
+	// Processar em batches para otimizar performance
+	batchSize := 1000
+	for i := 0; i < len(medicos); i += batchSize {
+		end := i + batchSize
+		if end > len(medicos) {
+			end = len(medicos)
+		}
+
+		batch := medicos[i:end]
+
+		// Contar registros existentes antes da operação
+		var existingUUIDs []string
+		for _, m := range batch {
+			existingUUIDs = append(existingUUIDs, m.UUID.String())
+		}
+
+		var existingCount int64
+		s.db.Model(&domain.Medico{}).Where("uuid::text IN ?", existingUUIDs).Count(&existingCount)
+
+		// Executar upsert em batch com transação
+		tx := s.db.Begin()
+		for _, medico := range batch {
+			result := tx.Exec(query,
+				medico.UUID,
+				medico.Nome,
+				medico.Especialidade,
+				medico.CodMunicipio,
+			)
+			if result.Error != nil {
+				tx.Rollback()
+				return inserted, updated, result.Error
+			}
+		}
+
+		if err := tx.Commit().Error; err != nil {
 			return inserted, updated, err
 		}
 
-		if exists {
-			err = s.db.Model(&domain.Medico{}).Where("uuid = ?", medico.UUID).Updates(medico).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			updated++
-		} else {
-			err = s.db.Create(&medico).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			inserted++
+		// Calcular inserções e atualizações aproximadas
+		batchInserted := len(batch) - int(existingCount)
+		if batchInserted < 0 {
+			batchInserted = 0
+		}
+		batchUpdated := int(existingCount)
+
+		inserted += batchInserted
+		updated += batchUpdated
+	}
+
+	return inserted, updated, nil
+}
+
+// UpsertMedicosConcurrent - Versão concorrente otimizada para grandes volumes
+func (s *DataService) UpsertMedicosConcurrent(medicos []domain.Medico) (int, int, error) {
+	if len(medicos) == 0 {
+		return 0, 0, nil
+	}
+
+	// Número de workers baseado no número de CPU cores
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 6 {
+		numWorkers = 6 // Limita para não sobrecarregar o banco
+	}
+
+	batchSize := 300
+	batches := make([][]domain.Medico, 0)
+
+	// Dividir em batches
+	for i := 0; i < len(medicos); i += batchSize {
+		end := i + batchSize
+		if end > len(medicos) {
+			end = len(medicos)
+		}
+		batches = append(batches, medicos[i:end])
+	}
+
+	// Channels para coordenação
+	batchChan := make(chan []domain.Medico, len(batches))
+	resultChan := make(chan BatchResult, len(batches))
+
+	// Enviar batches para o channel
+	for _, batch := range batches {
+		batchChan <- batch
+	}
+	close(batchChan)
+
+	// Worker function
+	worker := func() {
+		for batch := range batchChan {
+			inserted, updated, err := s.processMedicoBatch(batch)
+			resultChan <- BatchResult{Inserted: inserted, Updated: updated, Err: err}
 		}
 	}
+
+	// Iniciar workers
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			worker()
+		}()
+	}
+
+	// Aguardar conclusão
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Coletar resultados
+	var totalInserted, totalUpdated int
+	for result := range resultChan {
+		if result.Err != nil {
+			return totalInserted, totalUpdated, result.Err
+		}
+		totalInserted += result.Inserted
+		totalUpdated += result.Updated
+	}
+
+	return totalInserted, totalUpdated, nil
+}
+
+func (s *DataService) processMedicoBatch(batch []domain.Medico) (int, int, error) {
+	query := `
+		INSERT INTO medicos (uuid, nome, especialidade, cod_municipio)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT (uuid) DO UPDATE SET
+			nome = EXCLUDED.nome,
+			especialidade = EXCLUDED.especialidade,
+			cod_municipio = EXCLUDED.cod_municipio
+	`
+
+	// Contar existentes
+	var existingUUIDs []string
+	for _, m := range batch {
+		existingUUIDs = append(existingUUIDs, m.UUID.String())
+	}
+
+	var existingCount int64
+	if err := s.db.Model(&domain.Medico{}).Where("uuid::text IN ?", existingUUIDs).Count(&existingCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	// Executar upsert
+	tx := s.db.Begin()
+	for _, medico := range batch {
+		if err := tx.Exec(query,
+			medico.UUID,
+			medico.Nome,
+			medico.Especialidade,
+			medico.CodMunicipio,
+		).Error; err != nil {
+			tx.Rollback()
+			return 0, 0, err
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return 0, 0, err
+	}
+
+	inserted := len(batch) - int(existingCount)
+	if inserted < 0 {
+		inserted = 0
+	}
+	updated := int(existingCount)
 
 	return inserted, updated, nil
 }

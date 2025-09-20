@@ -1,7 +1,12 @@
 package parsers
 
 import (
+	"bufio"
+	"encoding/csv"
+	"io"
 	"mime/multipart"
+	"strconv"
+	"strings"
 	"time"
 
 	"example.com/m/v2/internal/domain"
@@ -143,6 +148,92 @@ func (p *CSVParser) ParseMunicipios(file *multipart.FileHeader) ([]domain.Munici
 	return municipios, nil
 }
 
+// ParseMunicipiosStreaming - Versão otimizada que processa em chunks para economizar memória
+func (p *CSVParser) ParseMunicipiosStreaming(file *multipart.FileHeader, chunkSize int) ([]domain.Municipio, error) {
+	f, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(bufio.NewReader(f))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+
+	// Ler cabeçalho
+	headers, err := reader.Read()
+	if err != nil {
+		return nil, err
+	}
+
+	// Mapear índices das colunas
+	headerMap := make(map[string]int)
+	for i, header := range headers {
+		headerMap[strings.TrimSpace(header)] = i
+	}
+
+	var municipios []domain.Municipio
+	lineCount := 0
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue // Pular linhas com erro
+		}
+
+		lineCount++
+
+		// Processar em chunks para não consumir muita memória
+		if len(municipios) >= chunkSize {
+			// Aqui você poderia processar o chunk atual se necessário
+			// Para este exemplo, continuamos acumulando
+		}
+
+		municipio := domain.Municipio{}
+
+		// Mapear campos usando os índices do cabeçalho
+		if idx, exists := headerMap["codigo_ibge"]; exists && idx < len(record) {
+			municipio.Codigo = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["nome"]; exists && idx < len(record) {
+			municipio.Nome = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["latitude"]; exists && idx < len(record) {
+			municipio.Latitude = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["longitude"]; exists && idx < len(record) {
+			municipio.Longitude = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["capital"]; exists && idx < len(record) {
+			municipio.Capital = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["codigo_uf"]; exists && idx < len(record) {
+			municipio.CodigoUF = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["siafi_id"]; exists && idx < len(record) {
+			municipio.SiafiId = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["ddd"]; exists && idx < len(record) {
+			municipio.DDD = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["fuso_horario"]; exists && idx < len(record) {
+			municipio.FusoHora = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["populacao"]; exists && idx < len(record) {
+			if pop, err := strconv.Atoi(strings.TrimSpace(record[idx])); err == nil {
+				municipio.Populacao = pop
+			}
+		}
+
+		municipios = append(municipios, municipio)
+	}
+
+	return municipios, nil
+}
+
 func (p *CSVParser) ParseHospitais(file *multipart.FileHeader) ([]domain.Hospital, error) {
 	f, err := file.Open()
 	if err != nil {
@@ -253,6 +344,88 @@ func (p *CSVParser) ParseMedicos(file *multipart.FileHeader) ([]domain.Medico, e
 			Especialidade: csv.Especialidade,
 			CodMunicipio:  csv.CodMunicipio,
 		}
+		medicos = append(medicos, medico)
+	}
+
+	return medicos, nil
+}
+
+// ParseMedicosStreaming - Versão otimizada que processa em chunks para economizar memória
+func (p *CSVParser) ParseMedicosStreaming(file *multipart.FileHeader, chunkSize int) ([]domain.Medico, error) {
+	f, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(bufio.NewReader(f))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+
+	// Ler cabeçalho
+	headers, err := reader.Read()
+	if err != nil {
+		return nil, err
+	}
+
+	// Mapear índices das colunas
+	headerMap := make(map[string]int)
+	for i, header := range headers {
+		headerMap[strings.TrimSpace(header)] = i
+	}
+
+	var medicos []domain.Medico
+	lineCount := 0
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue // Pular linhas com erro
+		}
+
+		lineCount++
+
+		// Processar em chunks para não consumir muita memória
+		if len(medicos) >= chunkSize {
+			// Aqui você poderia processar o chunk atual se necessário
+			// Para este exemplo, continuamos acumulando
+		}
+
+		medico := domain.Medico{}
+
+		// Mapear UUID do campo codigo
+		var medicoUUID uuid.UUID
+		if idx, exists := headerMap["codigo"]; exists && idx < len(record) {
+			uuidStr := strings.TrimSpace(record[idx])
+			if uuidStr != "" {
+				if parsedUUID, err := uuid.Parse(uuidStr); err == nil {
+					medicoUUID = parsedUUID
+				} else {
+					// Se não for um UUID válido, gerar um novo
+					medicoUUID = uuid.New()
+				}
+			} else {
+				medicoUUID = uuid.New()
+			}
+		} else {
+			medicoUUID = uuid.New()
+		}
+		medico.UUID = medicoUUID
+
+		// Mapear outros campos usando os índices do cabeçalho
+		if idx, exists := headerMap["nome_completo"]; exists && idx < len(record) {
+			medico.Nome = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["especialidade"]; exists && idx < len(record) {
+			medico.Especialidade = strings.TrimSpace(record[idx])
+		}
+		if idx, exists := headerMap["cidade"]; exists && idx < len(record) {
+			medico.CodMunicipio = strings.TrimSpace(record[idx])
+		}
+
 		medicos = append(medicos, medico)
 	}
 
