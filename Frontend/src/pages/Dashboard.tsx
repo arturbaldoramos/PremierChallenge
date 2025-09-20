@@ -1,15 +1,10 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
-  Bell, 
-  Search, 
-  Settings, 
   BarChart3, 
   Users, 
-  DollarSign, 
-  TrendingUp,
+  DollarSign,
   Activity,
   CreditCard,
   Download
