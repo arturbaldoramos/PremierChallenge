@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -48,11 +49,13 @@ interface FilterState {
 }
 
 export default function Hospitals() {
+  const navigate = useNavigate()
   const [hospitals, setHospitals] = useState<Hospital[]>([])
   const [filteredHospitals, setFilteredHospitals] = useState<Hospital[]>([])
   const [loading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
     cidade: '',
     jardim: '',
@@ -178,9 +181,8 @@ export default function Hospitals() {
     setSpecialties(uniqueSpecialties)
   }
 
-  // Função para lidar com upload de arquivo
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+  // Função para processar arquivo (usada tanto para input quanto drag&drop)
+  const processFile = async (file: File) => {
     if (!file) return
 
     setUploading(true)
@@ -215,6 +217,40 @@ export default function Hospitals() {
     }
   }
 
+  // Função para lidar com upload de arquivo via input
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    await processFile(file)
+    
+    // Limpar input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Funções para drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    
+    const droppedFiles = e.dataTransfer.files
+    if (droppedFiles.length > 0) {
+      await processFile(droppedFiles[0]) // Pega apenas o primeiro arquivo
+    }
+  }
+
   // Função para remover arquivo
   const removeFile = () => {
     setUploadedFile(null)
@@ -226,36 +262,11 @@ export default function Hospitals() {
     }
   }
 
-  // Aplicar filtros
+  // Aplicar filtros - apenas formatação de texto (lógica de filtro será feita pelo backend)
   useEffect(() => {
-    let filtered = hospitals
-
-    if (filters.cidade) {
-      filtered = filtered.filter(h => 
-        h.cidade.toLowerCase().includes(filters.cidade.toLowerCase())
-      )
-    }
-
-    if (filters.jardim) {
-      filtered = filtered.filter(h => 
-        h.jardim.toLowerCase().includes(filters.jardim.toLowerCase())
-      )
-    }
-
-    if (filters.specialty) {
-      filtered = filtered.filter(h => 
-        h.especialidades.includes(filters.specialty)
-      )
-    }
-
-    if (filters.search) {
-      filtered = filtered.filter(h => 
-        h.nome.toLowerCase().includes(filters.search.toLowerCase()) ||
-        h.cidade.toLowerCase().includes(filters.search.toLowerCase())
-      )
-    }
-
-    setFilteredHospitals(filtered)
+    // Por enquanto, mostra todos os hospitais
+    // O backend será responsável pela lógica de filtro
+    setFilteredHospitals(hospitals)
   }, [hospitals, filters])
 
   const clearFilters = () => {
@@ -295,11 +306,25 @@ export default function Hospitals() {
           </CardHeader>
           <CardContent>
             {!uploadedFile ? (
-              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-muted-foreground/50 transition-colors">
-                <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">Faça upload do arquivo de hospitais</h3>
+              <div 
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  isDragOver 
+                    ? 'border-primary bg-primary/5' 
+                    : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
+                <h3 className="text-lg font-medium mb-2">
+                  {isDragOver ? 'Solte o arquivo aqui' : 'Faça upload do arquivo de hospitais'}
+                </h3>
                 <p className="text-muted-foreground mb-4">
-                  Selecione um arquivo com os dados dos hospitais (CSV, Excel, etc.)
+                  {isDragOver 
+                    ? 'Arraste e solte o arquivo aqui'
+                    : 'Arraste um arquivo aqui ou selecione com os dados dos hospitais (CSV, Excel, etc.)'
+                  }
                 </p>
                 <div className="flex items-center justify-center gap-4">
                   <Button onClick={() => fileInputRef.current?.click()}>
@@ -339,6 +364,23 @@ export default function Hospitals() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Botão para página de upload múltiplo - só aparece quando não há dados carregados */}
+      {hospitals.length === 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-muted-foreground mb-4">
+                Ou gerencie múltiplos arquivos de diferentes nichos
+              </p>
+              <Button variant="outline" size="sm" onClick={() => navigate('/file-manager')}>
+                <FileText className="mr-2 h-4 w-4" />
+                Gerenciar Arquivos Múltiplos
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -447,51 +489,54 @@ export default function Hospitals() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {/* Filtro por Cidade */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Cidade</label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar cidade..."
-                  value={filters.cidade}
-                  onChange={(e) => setFilters(prev => ({ ...prev, cidade: e.target.value }))}
-                  className="pl-8"
-                />
-              </div>
-            </div>
+                   {/* Filtro por Cidade - apenas formatação de texto */}
+                   <div className="space-y-2">
+                     <label className="text-sm font-medium">Cidade</label>
+                     <div className="relative">
+                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                       <Input
+                         placeholder="Buscar cidade..."
+                         value={filters.cidade}
+                         onChange={(e) => setFilters(prev => ({ ...prev, cidade: e.target.value }))}
+                         className="pl-8"
+                       />
+                     </div>
+                     <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
+                   </div>
 
-            {/* Filtro por Jardim */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Jardim</label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar jardim..."
-                  value={filters.jardim}
-                  onChange={(e) => setFilters(prev => ({ ...prev, jardim: e.target.value }))}
-                  className="pl-8"
-                />
-              </div>
-            </div>
+                   {/* Filtro por Jardim - apenas formatação de texto */}
+                   <div className="space-y-2">
+                     <label className="text-sm font-medium">Jardim</label>
+                     <div className="relative">
+                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                       <Input
+                         placeholder="Buscar jardim..."
+                         value={filters.jardim}
+                         onChange={(e) => setFilters(prev => ({ ...prev, jardim: e.target.value }))}
+                         className="pl-8"
+                       />
+                     </div>
+                     <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
+                   </div>
 
-            {/* Filtro por Nome */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome do Hospital</label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar nome..."
-                  value={filters.search}
-                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                  className="pl-8"
-                />
-              </div>
-            </div>
+                   {/* Filtro por Nome - apenas formatação de texto */}
+                   <div className="space-y-2">
+                     <label className="text-sm font-medium">Nome do Hospital</label>
+                     <div className="relative">
+                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                       <Input
+                         placeholder="Buscar nome..."
+                         value={filters.search}
+                         onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                         className="pl-8"
+                       />
+                     </div>
+                     <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
+                   </div>
 
-            {/* Filtro por Especialidade */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Especialidade</label>
+                   {/* Filtro por Especialidade - apenas formatação de texto */}
+                   <div className="space-y-2">
+                     <label className="text-sm font-medium">Especialidade</label>
               <Popover open={openSpecialty} onOpenChange={setOpenSpecialty}>
                 <PopoverTrigger asChild>
                   <Button
@@ -548,6 +593,7 @@ export default function Hospitals() {
                   </Command>
                 </PopoverContent>
               </Popover>
+              <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
             </div>
 
             {/* Contador de resultados */}
@@ -581,13 +627,9 @@ export default function Hospitals() {
             <div className="text-center py-8">
               <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Nenhum hospital carregado</h3>
-              <p className="text-muted-foreground mb-4">
-                Faça upload de um arquivo CSV com os dados dos hospitais para começar.
+              <p className="text-muted-foreground">
+                Faça upload de um arquivo com os dados dos hospitais para começar.
               </p>
-              <Button onClick={() => fileInputRef.current?.click()}>
-                <Upload className="mr-2 h-4 w-4" />
-                Fazer Upload
-              </Button>
             </div>
           ) : filteredHospitals.length === 0 ? (
             <div className="text-center py-8">
