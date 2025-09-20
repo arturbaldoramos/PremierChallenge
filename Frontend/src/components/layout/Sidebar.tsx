@@ -8,7 +8,8 @@ import {
   TrendingUp,
   Building2,
   FolderOpen,
-  Stethoscope
+  Stethoscope,
+  MapPin
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -21,6 +22,7 @@ export function Sidebar() {
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/hospitals', label: 'Hospitais', icon: Building2 },
     { path: '/doctors', label: 'Médicos', icon: Stethoscope },
+    { path: '/states', label: 'Estados', icon: MapPin },
     { path: '/file-manager', label: 'Gerenciador de Arquivos', icon: FolderOpen },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/users', label: 'Usuários', icon: Users },
