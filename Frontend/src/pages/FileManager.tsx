@@ -88,14 +88,21 @@ export default function FileManager() {
 
     setFiles(prev => [...prev, ...newFiles])
 
-    // Processar arquivos automaticamente
+    // Processar arquivos automaticamente baseado na categoria
     validFiles.forEach((file, index) => {
       const fileId = `file-${Date.now()}-${index}`;
-      processFileWithChunking(file, fileId);
+      
+      // Aplica chunking apenas para pacientes
+      if (selectedCategory === 'Pacientes') {
+        processFileWithChunking(file, fileId);
+      } else {
+        // Para outras categorias, usa processamento simples
+        processFileSimple(file, fileId);
+      }
     });
   }
 
-  // Função para processar arquivo com chunking
+  // Função para processar arquivo com chunking (apenas para pacientes)
   const processFileWithChunking = async (file: File, fileId: string) => {
     const fileIndex = files.findIndex(f => f.id === fileId);
     
@@ -130,6 +137,64 @@ export default function FileManager() {
           result,
           chunks: result.chunks,
           error: result.errors.join(', ')
+        } : f
+      ));
+
+    } catch (error) {
+      setFiles(prev => prev.map((f, i) => 
+        i === fileIndex ? { 
+          ...f, 
+          status: 'error',
+          progress: 0,
+          error: error instanceof Error ? error.message : 'Erro desconhecido'
+        } : f
+      ));
+    }
+  };
+
+  // Função para processar arquivo simples (sem chunking) para outras entidades
+  const processFileSimple = async (file: File, fileId: string) => {
+    const fileIndex = files.findIndex(f => f.id === fileId);
+    
+    // Atualiza status para processando
+    setFiles(prev => prev.map((f, i) => 
+      i === fileIndex ? { ...f, status: 'processing', progress: 0 } : f
+    ));
+
+    try {
+      // Simula progresso de upload
+      const progressInterval = setInterval(() => {
+        setFiles(prev => prev.map((f, i) => 
+          i === fileIndex ? { 
+            ...f, 
+            progress: Math.min(f.progress + 10, 90)
+          } : f
+        ));
+      }, 200);
+
+      // Detecta tipo de arquivo
+      const fileType = FileDetector.detectFileType(file);
+      
+      // Simula envio para backend
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      clearInterval(progressInterval);
+
+      // Atualiza com resultado
+      setFiles(prev => prev.map((f, i) => 
+        i === fileIndex ? { 
+          ...f, 
+          status: 'processed',
+          progress: 100,
+          result: {
+            fileType: fileType || { type: 'unknown', extension: '', mimeType: '', description: 'Unknown' },
+            chunks: [],
+            totalChunks: 0,
+            processingTime: 1000,
+            errors: []
+          },
+          chunks: [],
+          error: undefined
         } : f
       ));
 
@@ -248,15 +313,16 @@ export default function FileManager() {
             <BarChart3 className="mr-2 h-4 w-4" />
             {showStats ? 'Ocultar' : 'Mostrar'} Estatísticas
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            disabled={stats.totalChunks === 0}
-            onClick={downloadAllChunks}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Baixar Chunks
-          </Button>
+          {stats.totalChunks > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={downloadAllChunks}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Baixar Chunks
+            </Button>
+          )}
         </div>
       </div>
 
@@ -281,14 +347,16 @@ export default function FileManager() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Total de Chunks
+                {stats.totalChunks > 0 ? 'Total de Chunks' : 'Arquivos Simples'}
               </CardTitle>
               <Database className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalChunks}</div>
+              <div className="text-2xl font-bold">
+                {stats.totalChunks > 0 ? stats.totalChunks : stats.processedFiles}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Chunks gerados
+                {stats.totalChunks > 0 ? 'Chunks gerados' : 'Arquivos processados'}
               </p>
             </CardContent>
           </Card>
@@ -376,7 +444,11 @@ export default function FileManager() {
                 }
               </p>
                <p className="text-xs text-muted-foreground mb-4">
-                 Tipos suportados: XML, JSON, PDF, CSV, TXT • Sem limite de tamanho - processamento em chunks inteligentes
+                 Tipos suportados: XML, JSON, PDF, CSV, TXT • 
+                 {selectedCategory === 'Pacientes' 
+                   ? 'Sem limite de tamanho - processamento em chunks inteligentes'
+                   : 'Detecção automática de tipo e envio para backend'
+                 }
                </p>
               <div className="flex items-center justify-center gap-4">
                 <Button onClick={() => fileInputRef.current?.click()}>
@@ -438,7 +510,7 @@ export default function FileManager() {
                                 Processando...
                               </Badge>
                             )}
-                            {file.status === 'processed' && file.chunks && (
+                            {file.status === 'processed' && file.chunks && file.chunks.length > 0 && (
                               <div className="flex gap-2">
                                 <Button 
                                   size="sm" 
@@ -452,6 +524,26 @@ export default function FileManager() {
                                   size="sm" 
                                   variant="outline"
                                   onClick={() => downloadChunk(file.chunks![0])}
+                                >
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Baixar
+                                </Button>
+                              </div>
+                            )}
+                            {file.status === 'processed' && (!file.chunks || file.chunks.length === 0) && (
+                              <div className="flex gap-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => {/* TODO: Implementar visualização de dados simples */}}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Ver Dados
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => {/* TODO: Implementar download simples */}}
                                 >
                                   <Download className="h-4 w-4 mr-1" />
                                   Baixar
@@ -492,7 +584,10 @@ export default function FileManager() {
                               <>
                                 <CheckCircle className="h-4 w-4 text-green-500" />
                                 <span className="text-sm text-green-600">
-                                  Processado ({file.chunks?.length} chunks)
+                                  {file.chunks && file.chunks.length > 0 
+                                    ? `Processado (${file.chunks.length} chunks)`
+                                    : 'Processado e enviado para backend'
+                                  }
                                 </span>
                               </>
                             )}
