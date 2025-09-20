@@ -11,4 +11,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    force: true,
+  },
+  server: {
+    hmr: {
+      overlay: false,
+    },
+  },
 })
