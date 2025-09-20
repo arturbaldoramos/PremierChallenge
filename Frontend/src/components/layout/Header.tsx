@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 export function Header() {
   return (
@@ -19,6 +20,8 @@ export function Header() {
       </div>
       
       <div className="flex items-center gap-2">
+        <ThemeToggle />
+        
         <Button variant="outline" size="icon" className="relative">
           <Bell className="h-4 w-4" />
           <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
