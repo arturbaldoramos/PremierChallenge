@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronsLeft, 
+  ChevronsRight 
+} from "lucide-react"
+import { 
   Building2, 
   MapPin, 
   Users, 
@@ -37,14 +43,15 @@ interface Hospital {
   codigo: string
   nome: string
   cidade: string
-  jardim: string
+  bairro: string
   especialidades: string[]
   leitos_totais: number
+  colaboradores: number
 }
 
 interface FilterState {
   cidade: string
-  jardim: string
+  bairro: string
   specialty: string
   search: string
 }
@@ -59,12 +66,16 @@ export default function Hospitals() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
     cidade: '',
-    jardim: '',
+    bairro: '',
     specialty: '',
     search: ''
   })
   const [openSpecialty, setOpenSpecialty] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(6) // 6 hospitais por página
 
   // Configuração da API - substitua pela sua URL
   const API_URL = 'https://sua-api.com/upload'
@@ -75,97 +86,109 @@ export default function Hospitals() {
       codigo: "H001",
       nome: "Hospital São Paulo",
       cidade: "São Paulo",
-      jardim: "Centro",
+      bairro: "Centro",
       especialidades: ["Cardiologia", "Neurologia", "Pediatria"],
-      leitos_totais: 450
+      leitos_totais: 450,
+      colaboradores: 320
     },
     {
       codigo: "H002", 
       nome: "Hospital das Clínicas",
       cidade: "São Paulo",
-      jardim: "Cerqueira César",
+      bairro: "Cerqueira César",
       especialidades: ["Cardiologia", "Oncologia", "Transplantes"],
-      leitos_totais: 1200
+      leitos_totais: 1200,
+      colaboradores: 850
     },
     {
       codigo: "H003",
       nome: "Hospital Sírio-Libanês",
       cidade: "São Paulo", 
-      jardim: "Bela Vista",
+      bairro: "Bela Vista",
       especialidades: ["Cardiologia", "Neurologia", "Ortopedia"],
-      leitos_totais: 350
+      leitos_totais: 350,
+      colaboradores: 280
     },
     {
       codigo: "H004",
       nome: "Hospital Copa D'Or",
       cidade: "Rio de Janeiro",
-      jardim: "Copacabana",
+      bairro: "Copacabana",
       especialidades: ["Cardiologia", "Neurologia", "Pediatria"],
-      leitos_totais: 280
+      leitos_totais: 280,
+      colaboradores: 220
     },
     {
       codigo: "H005",
       nome: "Hospital Albert Einstein",
       cidade: "São Paulo",
-      jardim: "Morumbi",
+      bairro: "Morumbi",
       especialidades: ["Cardiologia", "Oncologia", "Neurologia", "Pediatria"],
-      leitos_totais: 600
+      leitos_totais: 600,
+      colaboradores: 450
     },
     {
       codigo: "H006",
       nome: "Hospital Oswaldo Cruz",
       cidade: "São Paulo",
-      jardim: "Paraíso",
+      bairro: "Paraíso",
       especialidades: ["Cardiologia", "Neurologia"],
-      leitos_totais: 180
+      leitos_totais: 180,
+      colaboradores: 150
     },
     {
       codigo: "H007",
       nome: "Hospital Samaritano",
       cidade: "Rio de Janeiro",
-      jardim: "Botafogo",
+      bairro: "Botafogo",
       especialidades: ["Cardiologia", "Ortopedia", "Pediatria"],
-      leitos_totais: 220
+      leitos_totais: 220,
+      colaboradores: 180
     },
     {
       codigo: "H008",
       nome: "Hospital Beneficência Portuguesa",
       cidade: "São Paulo",
-      jardim: "Vila Clementino",
+      bairro: "Vila Clementino",
       especialidades: ["Cardiologia", "Neurologia", "Oncologia"],
-      leitos_totais: 400
+      leitos_totais: 400,
+      colaboradores: 320
     },
     {
       codigo: "H009",
       nome: "Hospital Pró-Cardíaco",
       cidade: "Rio de Janeiro",
-      jardim: "Botafogo",
+      bairro: "Botafogo",
       especialidades: ["Cardiologia"],
-      leitos_totais: 150
+      leitos_totais: 150,
+      colaboradores: 120
     },
     {
       codigo: "H010",
       nome: "Hospital Santa Catarina",
       cidade: "São Paulo",
-      jardim: "Vila Mariana",
+      bairro: "Vila Mariana",
       especialidades: ["Cardiologia", "Neurologia", "Pediatria", "Ortopedia"],
-      leitos_totais: 320
+      leitos_totais: 320,
+      colaboradores: 250
     },
     {
       codigo: "H011",
       nome: "Hospital São Luiz",
       cidade: "São Paulo",
-      jardim: "Itaim Bibi",
+      bairro: "Itaim Bibi",
       especialidades: ["Cardiologia", "Neurologia"],
-      leitos_totais: 200
+      leitos_totais: 200,
+      colaboradores: 160
     },
     {
       codigo: "H012",
       nome: "Hospital Barra D'Or",
       cidade: "Rio de Janeiro",
-      jardim: "Barra da Tijuca",
+      bairro: "Barra da Tijuca",
       especialidades: ["Cardiologia", "Neurologia", "Pediatria"],
-      leitos_totais: 180
+      leitos_totais: 180,
+      colaboradores: 140
     }
   ]
 
@@ -265,18 +288,45 @@ export default function Hospitals() {
 
   // Aplicar filtros - apenas formatação de texto (lógica de filtro será feita pelo backend)
   useEffect(() => {
-    // Por enquanto, mostra todos os hospitais
-    // O backend será responsável pela lógica de filtro
-    setFilteredHospitals(hospitals)
+    // Se não há filtros ativos, mostra todos os hospitais
+    const hasActiveFilters = filters.cidade || filters.bairro || filters.specialty || filters.search
+    
+    if (!hasActiveFilters) {
+      setFilteredHospitals(hospitals)
+    } else {
+      // Quando há filtros, o backend será responsável pela lógica de filtro
+      // Por enquanto, mostra todos os hospitais (será substituído pela resposta do backend)
+      setFilteredHospitals(hospitals)
+    }
+    
+    setCurrentPage(1) // Reset para primeira página quando filtros mudam
   }, [hospitals, filters])
+
+  // Funções de paginação
+  const totalPages = Math.ceil(filteredHospitals.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentHospitals = filteredHospitals.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  const goToFirstPage = () => goToPage(1)
+  const goToLastPage = () => goToPage(totalPages)
+  const goToPreviousPage = () => goToPage(currentPage - 1)
+  const goToNextPage = () => goToPage(currentPage + 1)
 
   const clearFilters = () => {
     setFilters({
       cidade: '',
-      jardim: '',
+      bairro: '',
       specialty: '',
       search: ''
     })
+    // Garantir que todos os hospitais sejam exibidos quando filtros são limpos
+    setFilteredHospitals(hospitals)
+    setCurrentPage(1)
   }
 
 
@@ -446,16 +496,16 @@ export default function Hospitals() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Cidades Cobertas
+              Total de Colaboradores
             </CardTitle>
-            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {new Set(hospitals.map(h => h.cidade)).size}
+              {hospitals.reduce((sum, h) => sum + h.colaboradores, 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              Cidades diferentes
+              Médicos e funcionários
             </p>
           </CardContent>
         </Card>
@@ -466,15 +516,23 @@ export default function Hospitals() {
       {hospitals.length > 0 && (
         <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              Filtros
-            </CardTitle>
-            <Button variant="outline" size="sm" onClick={clearFilters}>
-              Limpar Filtros
-            </Button>
-          </div>
+                 <div className="flex items-center justify-between">
+                   <CardTitle className="flex items-center gap-2">
+                     <Filter className="h-5 w-5" />
+                     Filtros
+                   </CardTitle>
+                   <div className="flex items-center space-x-2">
+                     <Button variant="outline" size="sm" onClick={() => {
+                       setFilteredHospitals(hospitals)
+                       setCurrentPage(1)
+                     }}>
+                       Ver Todos
+                     </Button>
+                     <Button variant="outline" size="sm" onClick={clearFilters}>
+                       Limpar Filtros
+                     </Button>
+                   </div>
+                 </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -493,15 +551,14 @@ export default function Hospitals() {
                      <p className="text-xs text-muted-foreground">Filtro será processado pelo backend</p>
                    </div>
 
-                   {/* Filtro por Jardim - apenas formatação de texto */}
                    <div className="space-y-2">
-                     <label className="text-sm font-medium">Jardim</label>
+                     <label className="text-sm font-medium">Bairro</label>
                      <div className="relative">
                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                        <Input
-                         placeholder="Buscar jardim..."
-                         value={filters.jardim}
-                         onChange={(e) => setFilters(prev => ({ ...prev, jardim: e.target.value }))}
+                         placeholder="Buscar bairro..."
+                         value={filters.bairro}
+                         onChange={(e) => setFilters(prev => ({ ...prev, bairro: e.target.value }))}
                          className="pl-8"
                        />
                      </div>
@@ -597,9 +654,8 @@ export default function Hospitals() {
         </Card>
       )}
 
-      {/* Lista de Hospitais - só aparece quando não há dados carregados */}
-      {hospitals.length === 0 && (
-        <Card>
+      {/* Lista de Hospitais */}
+      <Card>
         <CardHeader>
           <CardTitle>Hospitais Encontrados</CardTitle>
         </CardHeader>
@@ -630,58 +686,135 @@ export default function Hospitals() {
             </div>
           ) : (
             <div className="space-y-4">
-               {filteredHospitals.map((hospital) => (
-                 <div key={hospital.codigo} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      <Building2 className="h-8 w-8 text-primary" />
+              {/* Grid de hospitais paginados */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {currentHospitals.map((hospital) => (
+                  <Card key={hospital.codigo} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                            <Building2 className="h-6 w-6 text-primary" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-semibold truncate">{hospital.nome}</h3>
+                          <div className="space-y-1 mt-2">
+                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                              <MapPin className="h-4 w-4" />
+                              <span>{hospital.cidade}</span>
+                            </div>
+                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                              <Stethoscope className="h-4 w-4" />
+                              <span>{hospital.leitos_totais} leitos</span>
+                            </div>
+                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                              <Users className="h-4 w-4" />
+                              <span>{hospital.colaboradores} colaboradores</span>
+                            </div>
+                            <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                              <span className="font-medium">Bairro:</span>
+                              <span>{hospital.bairro}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-3">
+                            {hospital.especialidades.map((specialty) => (
+                              <Badge key={specialty} variant="secondary" className="text-xs">
+                                {specialty}
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="mt-3 pt-3 border-t">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">
+                                Código: {hospital.codigo}
+                              </span>
+                              <Button variant="outline" size="sm">
+                                Ver Detalhes
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Controles de paginação */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {startIndex + 1} a {Math.min(endIndex, filteredHospitals.length)} de {filteredHospitals.length} hospitais
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToFirstPage}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToPreviousPage}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(pageNum)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
                     </div>
-                     <div className="flex-1">
-                       <h3 className="text-lg font-medium">{hospital.nome}</h3>
-                       <div className="flex items-center space-x-4 mt-1">
-                         <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                           <MapPin className="h-4 w-4" />
-                           <span>{hospital.cidade}</span>
-                         </div>
-                         <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                           <Stethoscope className="h-4 w-4" />
-                           <span>{hospital.leitos_totais} leitos</span>
-                         </div>
-                       </div>
-                       <div className="flex flex-wrap gap-1 mt-2">
-                         <Badge variant="outline" className="text-xs">
-                           {hospital.jardim}
-                         </Badge>
-                         {hospital.especialidades.slice(0, 2).map((specialty) => (
-                           <Badge key={specialty} variant="outline" className="text-xs">
-                             {specialty}
-                           </Badge>
-                         ))}
-                         {hospital.especialidades.length > 2 && (
-                           <Badge variant="outline" className="text-xs">
-                             +{hospital.especialidades.length - 2} mais
-                           </Badge>
-                         )}
-                       </div>
-                     </div>
-                   </div>
-                   <div className="flex items-center space-x-4">
-                     <div className="text-right">
-                       <p className="text-xs text-muted-foreground">
-                         Código: {hospital.codigo}
-                       </p>
-                     </div>
-                     <Button variant="outline" size="sm">
-                       Ver Detalhes
-                     </Button>
-                   </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToNextPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToLastPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </CardContent>
         </Card>
-      )}
     </div>
   )
 }
