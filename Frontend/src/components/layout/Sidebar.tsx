@@ -1,15 +1,13 @@
 import {
   Home,
-  BarChart3,
-  Users,
   Settings,
-  CreditCard,
-  Activity,
-  TrendingUp,
   Building2,
   FolderOpen,
   Stethoscope,
-  MapPin
+  MapPin,
+  User,
+  BookOpen,
+  Building
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -22,13 +20,11 @@ export function Sidebar() {
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/hospitals', label: 'Hospitais', icon: Building2 },
     { path: '/doctors', label: 'Médicos', icon: Stethoscope },
+    { path: '/patients', label: 'Pacientes', icon: User },
     { path: '/states', label: 'Estados', icon: MapPin },
+    { path: '/municipalities', label: 'Municípios', icon: Building },
+    { path: '/cid', label: 'CID', icon: BookOpen },
     { path: '/file-manager', label: 'Gerenciador de Arquivos', icon: FolderOpen },
-    { path: '/analytics', label: 'Analytics', icon: BarChart3 },
-    { path: '/users', label: 'Usuários', icon: Users },
-    { path: '/orders', label: 'Pedidos', icon: CreditCard },
-    { path: '/activity', label: 'Atividade', icon: Activity },
-    { path: '/reports', label: 'Relatórios', icon: TrendingUp },
   ]
 
   return (

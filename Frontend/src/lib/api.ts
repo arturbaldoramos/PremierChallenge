@@ -1,5 +1,5 @@
 // Configuração base da API
-const API_BASE_URL = '/api/v1/upload/'
+const API_BASE_URL = 'http://localhost:8080/api/v1/upload/'
 
 // Tipos para as respostas da API
 export interface ApiResponse<T> {
@@ -93,23 +93,24 @@ class ApiClient {
     })
   }
 
-  // POST - Criar novo registro
+  // POST - Criar novo registro ou upload de arquivo
   async post<T>(entity: string, data: any): Promise<ApiResponse<T>> {
+    // Se data é um File, criar FormData
+    if (data instanceof File) {
+      const formData = new FormData()
+      formData.append('file', data)
+      
+      return this.request<T>(`/${entity}`, {
+        method: 'POST',
+        headers: {}, // Remove Content-Type para FormData
+        body: formData,
+      })
+    }
+    
+    // Caso contrário, enviar como JSON
     return this.request<T>(`/${entity}`, {
       method: 'POST',
       body: JSON.stringify(data),
-    })
-  }
-
-  // POST - Upload de arquivo
-  async uploadFile<T>(entity: string, file: File): Promise<ApiResponse<T>> {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    return this.request<T>(`/${entity}`, {
-      method: 'POST',
-      headers: {}, // Remove Content-Type para FormData
-      body: formData,
     })
   }
 
@@ -144,62 +145,62 @@ export const apiClient = new ApiClient()
 export const api = {
   // Hospitais
   hospitals: {
-    getAll: () => apiClient.get('hospitals'),
-    getById: (id: string | number) => apiClient.get('hospitals', id),
-    create: (data: any) => apiClient.post('hospitals', data),
-    update: (id: string | number, data: any) => apiClient.put('hospitals', id, data),
-    delete: (id: string | number) => apiClient.delete('hospitals', id),
-    uploadFile: (file: File) => apiClient.uploadFile('hospitals', file),
+    getAll: () => apiClient.get('hospital'),
+    getById: (id: string | number) => apiClient.get('hospital', id),
+    create: (data: any) => apiClient.post('hospital', data),
+    update: (id: string | number, data: any) => apiClient.put('hospital', id, data),
+    delete: (id: string | number) => apiClient.delete('hospital', id),
+    uploadFile: (file: File) => apiClient.post('hospital', file),
   },
 
   // Médicos
   doctors: {
-    getAll: () => apiClient.get('doctors'),
-    getById: (id: string | number) => apiClient.get('doctors', id),
-    create: (data: any) => apiClient.post('doctors', data),
-    update: (id: string | number, data: any) => apiClient.put('doctors', id, data),
-    delete: (id: string | number) => apiClient.delete('doctors', id),
-    uploadFile: (file: File) => apiClient.uploadFile('doctors', file),
+    getAll: () => apiClient.get('medico'),
+    getById: (id: string | number) => apiClient.get('medico', id),
+    create: (data: any) => apiClient.post('medico', data),
+    update: (id: string | number, data: any) => apiClient.put('medico', id, data),
+    delete: (id: string | number) => apiClient.delete('medico', id),
+    uploadFile: (file: File) => apiClient.post('medico', file),
   },
 
   // Estados
   states: {
-    getAll: () => apiClient.get('states'),
-    getById: (id: string | number) => apiClient.get('states', id),
-    create: (data: any) => apiClient.post('states', data),
-    update: (id: string | number, data: any) => apiClient.put('states', id, data),
-    delete: (id: string | number) => apiClient.delete('states', id),
-    uploadFile: (file: File) => apiClient.uploadFile('states', file),
+    getAll: () => apiClient.get('estado'),
+    getById: (id: string | number) => apiClient.get('estado', id),
+    create: (data: any) => apiClient.post('estado', data),
+    update: (id: string | number, data: any) => apiClient.put('estado', id, data),
+    delete: (id: string | number) => apiClient.delete('estado', id),
+    uploadFile: (file: File) => apiClient.post('estado', file),
   },
 
-  // Cidades
-  cities: {
-    getAll: () => apiClient.get('cities'),
-    getById: (id: string | number) => apiClient.get('cities', id),
-    create: (data: any) => apiClient.post('cities', data),
-    update: (id: string | number, data: any) => apiClient.put('cities', id, data),
-    delete: (id: string | number) => apiClient.delete('cities', id),
-    uploadFile: (file: File) => apiClient.uploadFile('cities', file),
+  // Municípios
+  municipalities: {
+    getAll: () => apiClient.get('municipio'),
+    getById: (id: string | number) => apiClient.get('municipio', id),
+    create: (data: any) => apiClient.post('municipio', data),
+    update: (id: string | number, data: any) => apiClient.put('municipio', id, data),
+    delete: (id: string | number) => apiClient.delete('municipio', id),
+    uploadFile: (file: File) => apiClient.post('municipio', file),
   },
 
   // Pacientes
   patients: {
-    getAll: () => apiClient.get('patients'),
-    getById: (id: string | number) => apiClient.get('patients', id),
-    create: (data: any) => apiClient.post('patients', data),
-    update: (id: string | number, data: any) => apiClient.put('patients', id, data),
-    delete: (id: string | number) => apiClient.delete('patients', id),
-    uploadFile: (file: File) => apiClient.uploadFile('patients', file),
+    getAll: () => apiClient.get('paciente'),
+    getById: (id: string | number) => apiClient.get('paciente', id),
+    create: (data: any) => apiClient.post('paciente', data),
+    update: (id: string | number, data: any) => apiClient.put('paciente', id, data),
+    delete: (id: string | number) => apiClient.delete('paciente', id),
+    uploadFile: (file: File) => apiClient.post('paciente', file),
   },
 
-  // Equipamentos Médicos
-  medicalEquipment: {
-    getAll: () => apiClient.get('medical-equipment'),
-    getById: (id: string | number) => apiClient.get('medical-equipment', id),
-    create: (data: any) => apiClient.post('medical-equipment', data),
-    update: (id: string | number, data: any) => apiClient.put('medical-equipment', id, data),
-    delete: (id: string | number) => apiClient.delete('medical-equipment', id),
-    uploadFile: (file: File) => apiClient.uploadFile('medical-equipment', file),
+  // CID (Classificação Internacional de Doenças)
+  cid: {
+    getAll: () => apiClient.get('cid'),
+    getById: (id: string | number) => apiClient.get('cid', id),
+    create: (data: any) => apiClient.post('cid', data),
+    update: (id: string | number, data: any) => apiClient.put('cid', id, data),
+    delete: (id: string | number) => apiClient.delete('cid', id),
+    uploadFile: (file: File) => apiClient.post('cid', file),
   },
 }
 
@@ -210,7 +211,7 @@ export const createEntityApi = (entityName: string) => ({
   create: (data: any) => apiClient.post(entityName, data),
   update: (id: string | number, data: any) => apiClient.put(entityName, id, data),
   delete: (id: string | number) => apiClient.delete(entityName, id),
-  uploadFile: (file: File) => apiClient.uploadFile(entityName, file),
+  uploadFile: (file: File) => apiClient.post(entityName, file),
 })
 
 // Exportar tipos e classes

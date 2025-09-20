@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/chart"
 import { 
   Users, 
-  Stethoscope,
   Activity,
   Download,
   TrendingUp,
@@ -26,7 +25,7 @@ import {
   BarChart3,
   PieChart
 } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
 import { useState } from "react"
 
 // Dados mockados para demonstração
@@ -81,13 +80,12 @@ const dadosDoencasRecorrentes = [
   { name: "Ansiedade", value: 98, color: "#3b82f6" },
 ]
 
-const dadosTendenciasTemporais = [
-  { mes: "Jan", atendimentos: 1200, casos: 320 },
-  { mes: "Fev", atendimentos: 1350, casos: 340 },
-  { mes: "Mar", atendimentos: 1450, casos: 380 },
-  { mes: "Abr", atendimentos: 1600, casos: 420 },
-  { mes: "Mai", atendimentos: 1750, casos: 450 },
-  { mes: "Jun", atendimentos: 1900, casos: 480 },
+const dadosEficienciaHospital = [
+  { hospital: "Hospital Central", eficiencia: 92, tempoMedio: 45 },
+  { hospital: "Hospital Universitário", eficiencia: 88, tempoMedio: 52 },
+  { hospital: "Hospital Municipal", eficiencia: 85, tempoMedio: 38 },
+  { hospital: "Hospital Privado", eficiencia: 94, tempoMedio: 42 },
+  { hospital: "Hospital Regional", eficiencia: 79, tempoMedio: 58 },
 ]
 
 const chartConfig = {
@@ -97,6 +95,14 @@ const chartConfig = {
   },
   casos: {
     label: "Casos",
+    color: "hsl(var(--chart-2))",
+  },
+  eficiencia: {
+    label: "Eficiência (%)",
+    color: "hsl(var(--chart-1))",
+  },
+  tempoMedio: {
+    label: "Tempo Médio (min)",
     color: "hsl(var(--chart-2))",
   },
 }
@@ -210,14 +216,14 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total de Atendimentos
+              Taxa de Ocupação dos Leitos
             </CardTitle>
-            <Stethoscope className="h-4 w-4 text-muted-foreground" />
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2,847</div>
+            <div className="text-2xl font-bold">87.3%</div>
             <p className="text-xs text-muted-foreground">
-              +15.2% em relação ao mês anterior
+              +2.1% em relação ao mês anterior
             </p>
           </CardContent>
         </Card>
@@ -239,13 +245,13 @@ export default function Dashboard() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Médicos Ativos</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total de Hospitais</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">47</div>
+            <div className="text-2xl font-bold">127</div>
             <p className="text-xs text-muted-foreground">
-              +2 novos médicos este mês
+              +3 novos hospitais este mês
             </p>
           </CardContent>
         </Card>
@@ -337,15 +343,15 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              Tendências Temporais
+              Eficiência Operacional por Hospital
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer config={chartConfig} className="h-[300px]">
-              <LineChart data={dadosTendenciasTemporais}>
+              <BarChart data={dadosEficienciaHospital}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
-                  dataKey="mes" 
+                  dataKey="hospital" 
                   tick={{ fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
@@ -357,21 +363,17 @@ export default function Dashboard() {
                 />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Line 
-                  type="monotone" 
-                  dataKey="atendimentos" 
-                  stroke="var(--color-atendimentos)"
-                  strokeWidth={2}
-                  dot={{ fill: "var(--color-atendimentos)", strokeWidth: 2, r: 4 }}
+                <Bar 
+                  dataKey="eficiencia" 
+                  fill="var(--color-atendimentos)"
+                  radius={[4, 4, 0, 0]}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="casos" 
-                  stroke="var(--color-casos)"
-                  strokeWidth={2}
-                  dot={{ fill: "var(--color-casos)", strokeWidth: 2, r: 4 }}
+                <Bar 
+                  dataKey="tempoMedio" 
+                  fill="var(--color-casos)"
+                  radius={[4, 4, 0, 0]}
                 />
-              </LineChart>
+              </BarChart>
             </ChartContainer>
           </CardContent>
         </Card>
@@ -502,6 +504,90 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Métricas de Gestão */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Indicadores Críticos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Leitos Disponíveis</span>
+              <span className="font-semibold text-green-600">342</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Tempo Médio de Espera</span>
+              <span className="font-semibold text-orange-600">2.3h</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Taxa de Alta</span>
+              <span className="font-semibold text-blue-600">94.2%</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Reinternações</span>
+              <span className="font-semibold text-red-600">3.1%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Recursos Humanos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Médicos Ativos</span>
+              <span className="font-semibold">247</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Enfermeiros</span>
+              <span className="font-semibold">1,156</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Técnicos</span>
+              <span className="font-semibold">892</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Taxa de Absenteísmo</span>
+              <span className="font-semibold text-orange-600">4.2%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Performance Financeira
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Receita Mensal</span>
+              <span className="font-semibold text-green-600">R$ 2.4M</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Custo por Paciente</span>
+              <span className="font-semibold">R$ 1,247</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Margem de Lucro</span>
+              <span className="font-semibold text-green-600">12.8%</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">ROI</span>
+              <span className="font-semibold text-blue-600">8.4%</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
