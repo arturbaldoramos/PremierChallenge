@@ -5,9 +5,9 @@ import (
 )
 
 type Medico struct {
-	ID            int       `json:"id" db:"id"`
-	UUID          uuid.UUID `json:"uuid" db:"uuid"`
-	Nome          string    `json:"nome" db:"nome"`
-	Especialidade string    `json:"especialidade" db:"especialidade"`
-	CodMunicipio  string    `json:"cod_municipio" db:"cod_municipio"`
+	ID            int       `json:"id" gorm:"primaryKey;autoIncrement"`
+	UUID          uuid.UUID `json:"uuid" gorm:"type:uuid;uniqueIndex"`
+	Nome          string    `json:"nome" gorm:"not null;size:200"`
+	Especialidade string    `json:"especialidade" gorm:"index;size:100"`
+	CodMunicipio  string    `json:"cod_municipio" gorm:"index;size:10"`
 }
