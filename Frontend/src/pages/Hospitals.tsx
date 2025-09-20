@@ -14,6 +14,7 @@ import {
   Download,
   Upload,
   FileText,
+  FolderOpen,
   X
 } from "lucide-react"
 import {
@@ -288,6 +289,10 @@ export default function Hospitals() {
             <FileText className="mr-2 h-4 w-4" />
             Carregar Dados de Teste
           </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/file-manager')}>
+            <FolderOpen className="mr-2 h-4 w-4" />
+            Gerenciar Arquivos
+          </Button>
           <Button variant="outline" size="sm" disabled={hospitals.length === 0}>
             <Download className="mr-2 h-4 w-4" />
             Exportar Dados
@@ -368,22 +373,6 @@ export default function Hospitals() {
         </Card>
       )}
 
-      {/* Botão para página de upload múltiplo - só aparece quando não há dados carregados */}
-      {hospitals.length === 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <p className="text-muted-foreground mb-4">
-                Ou gerencie múltiplos arquivos de diferentes nichos
-              </p>
-              <Button variant="outline" size="sm" onClick={() => navigate('/file-manager')}>
-                <FileText className="mr-2 h-4 w-4" />
-                Gerenciar Arquivos Múltiplos
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Botão para página de upload - só aparece quando há dados carregados */}
       {hospitals.length > 0 && (
