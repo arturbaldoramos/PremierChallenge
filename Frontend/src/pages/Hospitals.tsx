@@ -60,8 +60,10 @@ export default function Hospitals() {
     search: ''
   })
   const [openSpecialty, setOpenSpecialty] = useState(false)
-  const [apiUrl, setApiUrl] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Configuração da API - substitua pela sua URL
+  const API_URL = 'https://sua-api.com/upload'
 
   // Especialidades médicas (será preenchida dinamicamente com os dados)
   const [specialties, setSpecialties] = useState<string[]>([])
@@ -69,7 +71,7 @@ export default function Hospitals() {
   // Função para lidar com upload de arquivo
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !apiUrl) return
+    if (!file) return
 
     setUploading(true)
     setUploadedFile(file)
@@ -78,7 +80,7 @@ export default function Hospitals() {
       const formData = new FormData()
       formData.append('file', file)
       
-      const response = await fetch(apiUrl, {
+      const response = await fetch(API_URL, {
         method: 'POST',
         body: formData
       })
@@ -97,7 +99,7 @@ export default function Hospitals() {
       
     } catch (error) {
       console.error('Erro ao fazer upload do arquivo:', error)
-      alert('Erro ao processar arquivo. Verifique a URL da API.')
+      alert('Erro ao processar arquivo. Verifique a configuração da API.')
     } finally {
       setUploading(false)
     }
@@ -167,35 +169,10 @@ export default function Hospitals() {
         </div>
       </div>
 
-      {/* Configuração da API */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Configuração da API
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">URL da API</label>
-            <Input
-              placeholder="https://sua-api.com/upload"
-              value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Insira a URL da sua API que receberá o arquivo via POST
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Área de Upload */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload de Dados dos Hospitais
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -204,13 +181,9 @@ export default function Hospitals() {
               <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Faça upload do arquivo de hospitais</h3>
               <p className="text-muted-foreground mb-4">
-                Selecione um arquivo com os dados dos hospitais (CSV, Excel, etc.)
               </p>
               <div className="flex items-center justify-center gap-4">
-                <Button 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!apiUrl}
-                >
+                <Button onClick={() => fileInputRef.current?.click()}>
                   <Upload className="mr-2 h-4 w-4" />
                   Selecionar Arquivo
                 </Button>
@@ -222,11 +195,6 @@ export default function Hospitals() {
                 onChange={handleFileUpload}
                 className="hidden"
               />
-              {!apiUrl && (
-                <p className="text-sm text-destructive mt-2">
-                  Configure a URL da API antes de fazer upload
-                </p>
-              )}
             </div>
           ) : (
             <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
@@ -255,7 +223,6 @@ export default function Hospitals() {
         </CardContent>
       </Card>
 
-      {/* Estatísticas */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
