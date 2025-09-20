@@ -133,13 +133,15 @@ func (h *UploadHandler) UploadMunicipios(w http.ResponseWriter, r *http.Request)
 
 	switch fileInfo.Type {
 	case parsers.CSV:
-		municipios, err := h.csvParser.ParseMunicipios(fileHeader)
+		// Usar versão streaming para economizar memória
+		municipios, err := h.csvParser.ParseMunicipiosStreaming(fileHeader, 1000)
 		if err != nil {
 			h.sendErrorResponse(w, "Failed to parse CSV file", err)
 			return
 		}
 
-		inserted, updated, err := h.dataService.UpsertMunicipios(municipios)
+		// Usar versão concorrente para melhor performance
+		inserted, updated, err := h.dataService.UpsertMunicipiosConcurrent(municipios)
 		if err != nil {
 			h.sendErrorResponse(w, "Failed to save municipios", err)
 			return
@@ -301,13 +303,15 @@ func (h *UploadHandler) UploadMedicos(w http.ResponseWriter, r *http.Request) {
 
 	switch fileInfo.Type {
 	case parsers.CSV:
-		medicos, err := h.csvParser.ParseMedicos(fileHeader)
+		// Usar versão streaming para economizar memória
+		medicos, err := h.csvParser.ParseMedicosStreaming(fileHeader, 1000)
 		if err != nil {
 			h.sendErrorResponse(w, "Failed to parse CSV file", err)
 			return
 		}
 
-		inserted, updated, err := h.dataService.UpsertMedicos(medicos)
+		// Usar versão concorrente para melhor performance
+		inserted, updated, err := h.dataService.UpsertMedicosConcurrent(medicos)
 		if err != nil {
 			h.sendErrorResponse(w, "Failed to save medicos", err)
 			return
