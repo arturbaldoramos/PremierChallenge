@@ -35,28 +35,58 @@ func (s *DataService) BulkInsertEstados(estados []domain.Estado) error {
 }
 
 func (s *DataService) UpsertEstados(estados []domain.Estado) (int, int, error) {
-	var inserted, updated int
+	if len(estados) == 0 {
+		return 0, 0, nil
+	}
 
+	// Usar PostgreSQL UPSERT com ON CONFLICT para melhor performance
+	query := `
+		INSERT INTO estados (codigo, unidade_federativa, nome, regiao, latitude, longitude)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (codigo) DO UPDATE SET
+			unidade_federativa = EXCLUDED.unidade_federativa,
+			nome = EXCLUDED.nome,
+			regiao = EXCLUDED.regiao,
+			latitude = EXCLUDED.latitude,
+			longitude = EXCLUDED.longitude
+	`
+
+	// Contar registros existentes antes da operação
+	var existingCodes []string
+	for _, e := range estados {
+		existingCodes = append(existingCodes, e.Codigo)
+	}
+
+	var existingCount int64
+	s.db.Model(&domain.Estado{}).Where("codigo IN ?", existingCodes).Count(&existingCount)
+
+	// Executar upsert em transação
+	tx := s.db.Begin()
 	for _, estado := range estados {
-		exists, err := s.EstadoExists(estado.Codigo)
-		if err != nil {
-			return inserted, updated, err
-		}
-
-		if exists {
-			err = s.db.Model(&domain.Estado{}).Where("codigo = ?", estado.Codigo).Updates(estado).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			updated++
-		} else {
-			err = s.db.Create(&estado).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			inserted++
+		result := tx.Exec(query,
+			estado.Codigo,
+			estado.UnidadeFederativa,
+			estado.Nome,
+			estado.Regiao,
+			estado.Latitude,
+			estado.Longitude,
+		)
+		if result.Error != nil {
+			tx.Rollback()
+			return 0, 0, result.Error
 		}
 	}
+
+	if err := tx.Commit().Error; err != nil {
+		return 0, 0, err
+	}
+
+	// Calcular inserções e atualizações
+	inserted := len(estados) - int(existingCount)
+	if inserted < 0 {
+		inserted = 0
+	}
+	updated := int(existingCount)
 
 	return inserted, updated, nil
 }
@@ -73,27 +103,81 @@ func (s *DataService) BulkInsertMunicipios(municipios []domain.Municipio) error 
 }
 
 func (s *DataService) UpsertMunicipios(municipios []domain.Municipio) (int, int, error) {
+	if len(municipios) == 0 {
+		return 0, 0, nil
+	}
+
+	// Usar PostgreSQL UPSERT com ON CONFLICT para melhor performance
+	query := `
+		INSERT INTO municipios (codigo, nome, latitude, longitude, capital, codigo_uf, siafi_id, ddd, fuso_hora, populacao)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (codigo) DO UPDATE SET
+			nome = EXCLUDED.nome,
+			latitude = EXCLUDED.latitude,
+			longitude = EXCLUDED.longitude,
+			capital = EXCLUDED.capital,
+			codigo_uf = EXCLUDED.codigo_uf,
+			siafi_id = EXCLUDED.siafi_id,
+			ddd = EXCLUDED.ddd,
+			fuso_hora = EXCLUDED.fuso_hora,
+			populacao = EXCLUDED.populacao
+	`
+
 	var inserted, updated int
 
-	for _, municipio := range municipios {
-		exists, err := s.MunicipioExists(municipio.Codigo)
-		if err != nil {
+	// Processar em batches para evitar sobrecarga de memória
+	batchSize := 500
+	for i := 0; i < len(municipios); i += batchSize {
+		end := i + batchSize
+		if end > len(municipios) {
+			end = len(municipios)
+		}
+
+		batch := municipios[i:end]
+
+		// Contar registros existentes antes da operação
+		var existingCodes []string
+		for _, m := range batch {
+			existingCodes = append(existingCodes, m.Codigo)
+		}
+
+		var existingCount int64
+		s.db.Model(&domain.Municipio{}).Where("codigo IN ?", existingCodes).Count(&existingCount)
+
+		// Executar upsert em batch
+		tx := s.db.Begin()
+		for _, municipio := range batch {
+			result := tx.Exec(query,
+				municipio.Codigo,
+				municipio.Nome,
+				municipio.Latitude,
+				municipio.Longitude,
+				municipio.Capital,
+				municipio.CodigoUF,
+				municipio.SiafiId,
+				municipio.DDD,
+				municipio.FusoHora,
+				municipio.Populacao,
+			)
+			if result.Error != nil {
+				tx.Rollback()
+				return inserted, updated, result.Error
+			}
+		}
+
+		if err := tx.Commit().Error; err != nil {
 			return inserted, updated, err
 		}
 
-		if exists {
-			err = s.db.Model(&domain.Municipio{}).Where("codigo = ?", municipio.Codigo).Updates(municipio).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			updated++
-		} else {
-			err = s.db.Create(&municipio).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			inserted++
+		// Calcular inserções e atualizações aproximadas
+		batchInserted := len(batch) - int(existingCount)
+		if batchInserted < 0 {
+			batchInserted = 0
 		}
+		batchUpdated := int(existingCount)
+
+		inserted += batchInserted
+		updated += batchUpdated
 	}
 
 	return inserted, updated, nil

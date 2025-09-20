@@ -65,10 +65,10 @@ type PacienteCSV struct {
 }
 
 type MedicoCSV struct {
-	ID            string `csv:"id"`
-	Nome          string `csv:"nome"`
+	UUID          string `csv:"codigo"`
+	Nome          string `csv:"nome_completo"`
 	Especialidade string `csv:"especialidade"`
-	CodMunicipio  string `csv:"cod_municipio"`
+	CodMunicipio  string `csv:"cidade"`
 }
 
 type CID10CSV struct {
@@ -241,8 +241,8 @@ func (p *CSVParser) ParseMedicos(file *multipart.FileHeader) ([]domain.Medico, e
 	var medicos []domain.Medico
 	for _, csv := range csvData {
 		var medicoUUID uuid.UUID
-		if csv.ID != "" {
-			medicoUUID, _ = uuid.Parse(csv.ID)
+		if csv.UUID != "" {
+			medicoUUID, _ = uuid.Parse(csv.UUID)
 		} else {
 			medicoUUID = uuid.New()
 		}
