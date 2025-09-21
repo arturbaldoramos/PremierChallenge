@@ -2250,8 +2250,213 @@ func (h *WebSocketHandler) parseCSVHospitaisFromString(csvData string) ([]domain
 }
 
 func (h *WebSocketHandler) processPacientes(sessionID, csvData string, batchSize int) error {
-	// TODO: Implementar quando necessário
-	return fmt.Errorf("patient processing not implemented yet")
+	return h.processPacientesStreaming(sessionID, csvData, batchSize)
+}
+
+// processPacientesStreaming processa CSV em streaming, criando batches conforme lê os dados
+func (h *WebSocketHandler) processPacientesStreaming(sessionID, csvData string, batchSize int) error {
+	reader := csv.NewReader(strings.NewReader(csvData))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+	reader.TrimLeadingSpace = true
+
+	// Ler cabeçalho
+	headers, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read CSV headers: %v", err)
+	}
+
+	// Criar mapa de índices dos cabeçalhos
+	headerMap := make(map[string]int)
+	for i, header := range headers {
+		headerMap[strings.ToLower(strings.TrimSpace(header))] = i
+	}
+
+	log.Printf("🔍 DEBUG Pacientes - Headers: %v", headers)
+	log.Printf("🔍 DEBUG Pacientes - Header map: %v", headerMap)
+
+	var currentBatch []domain.Paciente
+	batchNumber := 1
+	totalProcessed := 0
+
+	log.Printf("Starting streaming processing for pacientes session %s with batch size %d", sessionID, batchSize)
+
+	// Processar linha por linha
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("Error reading CSV record: %v", err)
+			continue
+		}
+
+		// Parse do paciente
+		paciente := domain.Paciente{}
+
+		// ID do paciente (UUID)
+		if idx, exists := headerMap["id"]; exists && idx < len(record) {
+			uuidStr := strings.TrimSpace(record[idx])
+			if uuidStr != "" {
+				if parsedUUID, err := uuid.Parse(uuidStr); err == nil {
+					paciente.ID = parsedUUID
+				} else {
+					paciente.ID = uuid.New()
+				}
+			} else {
+				paciente.ID = uuid.New()
+			}
+		} else {
+			paciente.ID = uuid.New()
+		}
+
+		// CPF
+		cpfColumns := []string{"cpf", "documento", "doc"}
+		for _, col := range cpfColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				paciente.CPF = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Nome
+		nomeColumns := []string{"nome", "nome_completo", "name", "full_name", "patient_name"}
+		for _, col := range nomeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				paciente.Nome = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Gênero
+		generoColumns := []string{"genero", "gender", "sex", "sexo"}
+		for _, col := range generoColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				genero := strings.TrimSpace(record[idx])
+				// Normalizar para M/F
+				if len(genero) > 0 {
+					switch strings.ToUpper(genero[:1]) {
+					case "M":
+						paciente.Genero = "M"
+					case "F":
+						paciente.Genero = "F"
+					default:
+						paciente.Genero = genero[:1] // Manter o primeiro caractere
+					}
+				}
+				break
+			}
+		}
+
+		// Código do município
+		municipioColumns := []string{"cod_municipio", "codigo_municipio", "municipio_id", "city_code", "cidade"}
+		for _, col := range municipioColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				paciente.CodMunicipio = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Bairro
+		bairroColumns := []string{"bairro", "district", "neighborhood", "endereco"}
+		for _, col := range bairroColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				paciente.Bairro = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Convênio
+		convenioColumns := []string{"convenio", "insurance", "plano_saude", "plano"}
+		for _, col := range convenioColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				paciente.Convenio = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// CID10
+		cid10Columns := []string{"cid10", "cid-10", "cid_10", "diagnosis", "diagnostico"}
+		for _, col := range cid10Columns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				paciente.CID10 = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Só adicionar se tiver pelo menos CPF e nome
+		if paciente.CPF != "" && paciente.Nome != "" {
+			currentBatch = append(currentBatch, paciente)
+			totalProcessed++
+
+			log.Printf("✅ DEBUG Pacientes - Adicionado: CPF=%s, Nome=%s, Genero=%s",
+				paciente.CPF, paciente.Nome, paciente.Genero)
+
+			// Se atingiu o tamanho do batch, processar
+			if len(currentBatch) >= batchSize {
+				err := h.submitPacientesBatch(sessionID, currentBatch, batchNumber)
+				if err != nil {
+					log.Printf("Error submitting batch %d: %v", batchNumber, err)
+				} else {
+					log.Printf("✓ Batch %d submitted with %d pacientes", batchNumber, len(currentBatch))
+				}
+
+				// Reset batch
+				currentBatch = []domain.Paciente{}
+				batchNumber++
+			}
+		} else {
+			log.Printf("⚠️ DEBUG Pacientes - Linha ignorada: CPF='%s', Nome='%s'", paciente.CPF, paciente.Nome)
+		}
+	}
+
+	// Processar último batch se houver registros restantes
+	if len(currentBatch) > 0 {
+		err := h.submitPacientesBatch(sessionID, currentBatch, batchNumber)
+		if err != nil {
+			log.Printf("Error submitting final batch %d: %v", batchNumber, err)
+		} else {
+			log.Printf("✓ Final batch %d submitted with %d pacientes", batchNumber, len(currentBatch))
+		}
+	}
+
+	log.Printf("Streaming processing completed. Total pacientes processed: %d in %d batches", totalProcessed, batchNumber)
+	return nil
+}
+
+// submitPacientesBatch submete um batch de pacientes para a fila Redis
+func (h *WebSocketHandler) submitPacientesBatch(sessionID string, pacientes []domain.Paciente, batchNumber int) error {
+	jobID := uuid.New().String()
+	job := &services.Job{
+		ID:         jobID,
+		Type:       "pacientes",
+		Status:     services.JobStatusPending,
+		TotalItems: len(pacientes),
+		CreatedAt:  time.Now(),
+		SessionID:  sessionID,
+	}
+
+	batchDataBytes, err := json.Marshal(pacientes)
+	if err != nil {
+		return fmt.Errorf("failed to marshal batch data: %v", err)
+	}
+
+	batchData := services.BatchData{
+		BatchNumber:  batchNumber,
+		TotalBatches: -1, // Não sabemos o total antecipadamente no streaming
+		Data:         batchDataBytes,
+	}
+
+	data, _ := json.Marshal(batchData)
+	job.Data = data
+
+	err = h.redisService.EnqueueJob(job)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue job: %v", err)
+	}
+
+	return nil
 }
 
 func (h *WebSocketHandler) processCID10(sessionID, csvData string, batchSize int) error {

@@ -472,43 +472,133 @@ func (s *DataService) processPacienteBulk(batch []domain.Paciente) (int, int, er
 		return 0, 0, nil
 	}
 
+	// Verificar se a coluna cid10 existe na tabela (fazer apenas uma vez)
+	var hasColumn bool
+	err := s.db.Raw("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pacientes' AND column_name = 'cid10')").Scan(&hasColumn).Error
+	if err != nil {
+		log.Printf("⚠️ Erro ao verificar coluna cid10: %v", err)
+		hasColumn = false
+	}
+
+	// Calcular tamanho máximo do sub-batch baseado no limite de parâmetros do PostgreSQL
+	// PostgreSQL limite: 65535 parâmetros
+	// Cada paciente usa 8 parâmetros (com CID10) ou 7 (sem CID10)
+	parametersPerRecord := 8
+	if !hasColumn {
+		parametersPerRecord = 7
+	}
+	maxSubBatchSize := 65535 / parametersPerRecord
+	if maxSubBatchSize > 1000 {
+		maxSubBatchSize = 1000 // Limite prático para evitar queries muito grandes
+	}
+
+	log.Printf("📊 Processando batch de %d pacientes em sub-batches de %d (hasColumn: %v)",
+		len(batch), maxSubBatchSize, hasColumn)
+
+	var totalInserted, totalUpdated int
+
+	// Processar em sub-batches
+	for i := 0; i < len(batch); i += maxSubBatchSize {
+		end := i + maxSubBatchSize
+		if end > len(batch) {
+			end = len(batch)
+		}
+
+		subBatch := batch[i:end]
+		inserted, updated, err := s.processSubBatchPacientes(subBatch, hasColumn)
+		if err != nil {
+			return totalInserted, totalUpdated, err
+		}
+
+		totalInserted += inserted
+		totalUpdated += updated
+
+		log.Printf("✓ Sub-batch %d-%d processado: %d inseridos, %d atualizados",
+			i+1, end, inserted, updated)
+	}
+
+	return totalInserted, totalUpdated, nil
+}
+
+// processSubBatchPacientes processa um sub-batch menor de pacientes
+func (s *DataService) processSubBatchPacientes(subBatch []domain.Paciente, hasColumn bool) (int, int, error) {
+	if len(subBatch) == 0 {
+		return 0, 0, nil
+	}
+
 	// Contar registros existentes antes da operação
 	var existingCPFs []string
-	for _, p := range batch {
+	for _, p := range subBatch {
 		existingCPFs = append(existingCPFs, p.CPF)
 	}
 
 	var existingCount int64
 	s.db.Model(&domain.Paciente{}).Where("cpf IN ?", existingCPFs).Count(&existingCount)
 
-	// Construir query de bulk insert
-	placeholders := make([]string, len(batch))
-	values := make([]interface{}, 0, len(batch)*8)
+	// Construir query de bulk insert baseado nas colunas disponíveis
+	var placeholders []string
+	var values []interface{}
+	var query string
 
-	for i, paciente := range batch {
-		placeholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?)"
-		values = append(values,
-			paciente.ID,
-			paciente.CPF,
-			paciente.Nome,
-			paciente.Genero,
-			paciente.CodMunicipio,
-			paciente.Bairro,
-			paciente.Convenio,
-			paciente.CID10)
+	if hasColumn {
+		// Query com CID10
+		placeholders = make([]string, len(subBatch))
+		values = make([]interface{}, 0, len(subBatch)*8)
+
+		for i, paciente := range subBatch {
+			placeholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?)"
+			values = append(values,
+				paciente.ID,
+				paciente.CPF,
+				paciente.Nome,
+				paciente.Genero,
+				paciente.CodMunicipio,
+				paciente.Bairro,
+				paciente.Convenio,
+				paciente.CID10)
+		}
+
+		query = `
+			INSERT INTO pacientes (id, cpf, nome, genero, cod_municipio, bairro, convenio, cid10)
+			VALUES ` + strings.Join(placeholders, ", ") + `
+			ON CONFLICT (cpf) DO UPDATE SET
+				nome = EXCLUDED.nome,
+				genero = EXCLUDED.genero,
+				cod_municipio = EXCLUDED.cod_municipio,
+				bairro = EXCLUDED.bairro,
+				convenio = EXCLUDED.convenio,
+				cid10 = EXCLUDED.cid10
+		`
+	} else {
+		// Query sem CID10 (fallback para compatibilidade)
+		log.Printf("⚠️ Usando fallback sem CID10")
+
+		placeholders = make([]string, len(subBatch))
+		values = make([]interface{}, 0, len(subBatch)*7)
+
+		for i, paciente := range subBatch {
+			placeholders[i] = "(?, ?, ?, ?, ?, ?, ?)"
+			values = append(values,
+				paciente.ID,
+				paciente.CPF,
+				paciente.Nome,
+				paciente.Genero,
+				paciente.CodMunicipio,
+				paciente.Bairro,
+				paciente.Convenio)
+		}
+
+		query = `
+			INSERT INTO pacientes (id, cpf, nome, genero, cod_municipio, bairro, convenio)
+			VALUES ` + strings.Join(placeholders, ", ") + `
+			ON CONFLICT (cpf) DO UPDATE SET
+				nome = EXCLUDED.nome,
+				genero = EXCLUDED.genero,
+				cod_municipio = EXCLUDED.cod_municipio,
+				bairro = EXCLUDED.bairro,
+				convenio = EXCLUDED.convenio
+		`
 	}
-
-	query := `
-		INSERT INTO pacientes (id, cpf, nome, genero, cod_municipio, bairro, convenio, cid10)
-		VALUES ` + strings.Join(placeholders, ", ") + `
-		ON CONFLICT (cpf) DO UPDATE SET
-			nome = EXCLUDED.nome,
-			genero = EXCLUDED.genero,
-			cod_municipio = EXCLUDED.cod_municipio,
-			bairro = EXCLUDED.bairro,
-			convenio = EXCLUDED.convenio,
-			cid10 = EXCLUDED.cid10
-	`
 
 	// Executar bulk insert
 	result := s.db.Exec(query, values...)
@@ -517,13 +607,13 @@ func (s *DataService) processPacienteBulk(batch []domain.Paciente) (int, int, er
 	}
 
 	// Calcular inserções e atualizações aproximadas
-	batchInserted := len(batch) - int(existingCount)
-	if batchInserted < 0 {
-		batchInserted = 0
+	subBatchInserted := len(subBatch) - int(existingCount)
+	if subBatchInserted < 0 {
+		subBatchInserted = 0
 	}
-	batchUpdated := int(existingCount)
+	subBatchUpdated := int(existingCount)
 
-	return batchInserted, batchUpdated, nil
+	return subBatchInserted, subBatchUpdated, nil
 }
 
 // Medico operations
