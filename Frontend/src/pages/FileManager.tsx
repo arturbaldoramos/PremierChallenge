@@ -13,11 +13,9 @@ import {
   AlertCircle,
   FileSpreadsheet,
   FileImage,
-  FileCode,
-  Database,
-  BarChart3
+  FileCode
 } from "lucide-react"
-import { FileDetector, formatFileSize } from '@/lib/file-detector'
+import { formatFileSize } from '@/lib/file-detector'
 import type { FileTypeInfo } from '@/lib/file-detector'
 import { FileUploader } from '@/components/FileUploader'
 
@@ -47,7 +45,6 @@ const fileCategories = [
 
 export default function FileManager() {
   const [files, setFiles] = useState<FileItem[]>([])
-  const [showStats, setShowStats] = useState(false)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
 
   const getFileIcon = (fileType: FileTypeInfo) => {
@@ -73,18 +70,6 @@ export default function FileManager() {
 
 
 
-  // Função para obter estatísticas
-  const getStats = () => {
-    const totalFiles = files.length
-    const processedFiles = files.filter(f => f.status === 'processed').length
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0)
-    const categories = [...new Set(files.map(f => f.category))].length
-    const totalErrors = files.reduce((sum, f) => sum + (f.error ? 1 : 0), 0)
-
-    return { totalFiles, processedFiles, totalSize, categories, totalErrors }
-  }
-
-  const stats = getStats()
 
   // Callbacks para o FileUploader
   const handleUploadComplete = (fileType: string, fileName: string) => {
@@ -115,86 +100,8 @@ export default function FileManager() {
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Gerenciador de Arquivos</h2>
-        <div className="flex items-center space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setShowStats(!showStats)}
-          >
-            <BarChart3 className="mr-2 h-4 w-4" />
-            {showStats ? 'Ocultar' : 'Mostrar'} Estatísticas
-          </Button>
-        </div>
       </div>
 
-      {/* Estatísticas */}
-      {showStats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total de Arquivos
-              </CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalFiles}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.processedFiles} processados
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Arquivos Processados
-              </CardTitle>
-              <Database className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.processedFiles}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Arquivos processados
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Erros
-              </CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalErrors}</div>
-              <p className="text-xs text-muted-foreground">
-                Erros encontrados
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Tamanho Total
-              </CardTitle>
-              <Upload className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {(stats.totalSize / 1024 / 1024).toFixed(1)} MB
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Espaço utilizado
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Mensagem de Upload */}
       {uploadMessage && (
