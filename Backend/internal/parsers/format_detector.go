@@ -23,6 +23,7 @@ const (
 	FormatFHIRXML
 	FormatHL7
 	FormatTXT
+
 )
 
 func (f FileFormat) String() string {
