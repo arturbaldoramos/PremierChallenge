@@ -1,26 +1,20 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
-  Bell, 
-  Search, 
-  Settings, 
-  BarChart3, 
-  Users, 
-  DollarSign, 
-  TrendingUp,
-  Activity,
-  CreditCard,
-  Download,
-  Building2,
   UserCheck,
   Bed,
   Heart,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Building2
 } from "lucide-react"
 import { useTotalStats } from "@/hooks/use-api"
+import { Stats2Card } from "@/components/Stats2Card"
+import { Cid10Stats } from "@/components/Cid10Stats"
+import { HospitaisMaisAcessados } from "@/components/HospitaisMaisAcessados"
+import { HospitaisChart } from "@/components/HospitaisChart"
+import { Cid10Chart } from "@/components/Cid10Chart"
 
 export default function Dashboard() {
   const { data: totalStats, loading, error, refetch } = useTotalStats();
@@ -194,109 +188,26 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Overview</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-              <BarChart3 className="h-8 w-8" />
-              <span className="ml-2">Gráfico de vendas</span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Recent Sales</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              <div className="flex items-center">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src="/avatars/01.png" alt="Avatar" />
-                  <AvatarFallback>OM</AvatarFallback>
-                </Avatar>
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    Olivia Martin
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    olivia.martin@email.com
-                  </p>
-                </div>
-                <div className="ml-auto font-medium">+$1,999.00</div>
-              </div>
-              
-              <div className="flex items-center">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src="/avatars/02.png" alt="Avatar" />
-                  <AvatarFallback>JL</AvatarFallback>
-                </Avatar>
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    Jackson Lee
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    jackson.lee@email.com
-                  </p>
-                </div>
-                <div className="ml-auto font-medium">+$39.00</div>
-              </div>
-              
-              <div className="flex items-center">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src="/avatars/03.png" alt="Avatar" />
-                  <AvatarFallback>IN</AvatarFallback>
-                </Avatar>
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    Isabella Nguyen
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    isabella.nguyen@email.com
-                  </p>
-                </div>
-                <div className="ml-auto font-medium">+$299.00</div>
-              </div>
-              
-              <div className="flex items-center">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src="/avatars/04.png" alt="Avatar" />
-                  <AvatarFallback>WK</AvatarFallback>
-                </Avatar>
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    William Kim
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    will@email.com
-                  </p>
-                </div>
-                <div className="ml-auto font-medium">+$99.00</div>
-              </div>
-              
-              <div className="flex items-center">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src="/avatars/05.png" alt="Avatar" />
-                  <AvatarFallback>SD</AvatarFallback>
-                </Avatar>
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    Sofia Davis
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    sofia.davis@email.com
-                  </p>
-                </div>
-                <div className="ml-auto font-medium">+$39.00</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
+      {/* Nova seção com estatísticas adicionais */}
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="xl:col-span-1">
+          <Stats2Card />
+        </div>
+        <div className="xl:col-span-1">
+          <Cid10Stats />
+        </div>
+        <div className="sm:col-span-2 xl:col-span-1">
+          <HospitaisMaisAcessados />
+        </div>
       </div>
+
+      {/* Seção de gráficos */}
+      <div className="grid gap-6 grid-cols-1 xl:grid-cols-2">
+        <HospitaisChart />
+        <Cid10Chart />
+      </div>
+      
     </div>
   )
 }
