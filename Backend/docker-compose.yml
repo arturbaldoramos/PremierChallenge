@@ -1,4 +1,4 @@
-version: '3.8'
+name: premiere_challenge
 
 services:
   redis:
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: premiere_postgres
     environment:
       POSTGRES_DB: premiere_challenge
