@@ -40,13 +40,12 @@ type MunicipioCSV struct {
 }
 
 type HospitalCSV struct {
-	ID             int    `csv:"id"`
-	UUID           string `csv:"uuid"`
+	UUID           string `csv:"codigo"`
 	Nome           string `csv:"nome"`
 	CEP            string `csv:"cep"`
 	Especialidades string `csv:"especialidades"`
 	LeitosTotais   int    `csv:"leitos_totais"`
-	CodMunicipio   string `csv:"cod_municipio"`
+	CodMunicipio   string `csv:"cidade"`
 	Bairro         string `csv:"bairro"`
 }
 
@@ -256,13 +255,13 @@ func (p *CSVParser) ParseHospitais(file *multipart.FileHeader) ([]domain.Hospita
 		}
 
 		hospital := domain.Hospital{
-			ID:           csv.ID,
-			UUID:         hospitalUUID,
-			Nome:         csv.Nome,
-			CEP:          csv.CEP,
-			LeitosTotais: csv.LeitosTotais,
-			CodMunicipio: csv.CodMunicipio,
-			Bairro:       csv.Bairro,
+			UUID:           hospitalUUID,
+			Nome:           csv.Nome,
+			CEP:            csv.CEP,
+			Especialidades: csv.Especialidades,
+			LeitosTotais:   csv.LeitosTotais,
+			CodMunicipio:   csv.CodMunicipio,
+			Bairro:         csv.Bairro,
 		}
 		hospitais = append(hospitais, hospital)
 	}
