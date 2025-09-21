@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"example.com/m/v2/internal/domain"
 	"github.com/google/uuid"
@@ -22,20 +21,10 @@ type XMLPaciente struct {
 	Codigo       string `xml:"Codigo"`
 	CPF          string `xml:"CPF"`
 	NomeCompleto string `xml:"Nome_Completo"`
-	RG           string `xml:"RG"`
-	DataNascimento string `xml:"Data_Nascimento"`
 	Genero       string `xml:"Genero"`
-	TipoSanguineo string `xml:"Tipo_Sanguineo"`
-	Endereco     string `xml:"Endereco"`
 	CodMunicipio string `xml:"Cod_municipio"`
-	CEP          string `xml:"CEP"`
-	Telefone     string `xml:"Telefone"`
-	Email        string `xml:"Email"`
-	ContatoEmergencia string `xml:"Contato_Emergencia"`
-	Convenio     string `xml:"Convenio"`
-	NumeroCarteira string `xml:"Numero_Carteira"`
-	Status       string `xml:"Status"`
 	Bairro       string `xml:"Bairro"`
+	Convenio     string `xml:"Convenio"`
 	CID10        string `xml:"CID-10"`
 }
 
@@ -80,38 +69,45 @@ func NewXMLParser() *XMLParser {
 // ParseXMLData detecta e parseia diferentes tipos de XML estruturado
 func (p *XMLParser) ParseXMLData(data []byte) (*ParsedData, string, error) {
 	// Tentar detectar o tipo de XML pela estrutura
-	content := string(data)
-	
+	content := string(data[:min(1000, len(data))]) // Verificar apenas primeiros 1000 chars para performance
+
 	if strings.Contains(content, "<Pacientes>") || strings.Contains(content, "<Paciente>") {
+		fmt.Printf("🔍 XML: Detectado como XML de pacientes\n")
 		return p.parsePacientesXML(data)
 	}
-	
+
 	if strings.Contains(content, "<Hospitais>") || strings.Contains(content, "<Hospital>") {
+		fmt.Printf("🔍 XML: Detectado como XML de hospitais\n")
 		return p.parseHospitaisXML(data)
 	}
-	
+
 	if strings.Contains(content, "<Medicos>") || strings.Contains(content, "<Medico>") {
+		fmt.Printf("🔍 XML: Detectado como XML de médicos\n")
 		return p.parseMedicosXML(data)
 	}
-	
+
+	fmt.Printf("🔍 XML: Não detectou tipo específico, usando parser genérico\n")
 	// XML genérico - tentar estrutura básica
 	return p.parseGenericXML(data)
 }
 
 // parsePacientesXML parseia XML de pacientes
 func (p *XMLParser) parsePacientesXML(data []byte) (*ParsedData, string, error) {
+	fmt.Printf("🔄 XML: Iniciando parse de pacientes (tamanho: %d bytes)\n", len(data))
+
 	var root XMLPacientesRoot
-	
+
 	if err := xml.Unmarshal(data, &root); err != nil {
+		fmt.Printf("❌ XML: Erro no Unmarshal: %v\n", err)
 		return nil, "", fmt.Errorf("erro ao fazer parse do XML de pacientes: %v", err)
 	}
+
+	fmt.Printf("✅ XML: Parse bem-sucedido, %d pacientes encontrados\n", len(root.Pacientes))
 	
 	// Headers para pacientes
 	headers := []string{
-		"codigo", "cpf", "nome_completo", "rg", "data_nascimento", 
-		"genero", "tipo_sanguineo", "endereco", "cod_municipio", 
-		"cep", "telefone", "email", "contato_emergencia", 
-		"convenio", "numero_carteira", "status", "bairro", "cid10",
+		"codigo", "cpf", "nome_completo", "genero",
+		"cod_municipio", "bairro", "convenio", "cid10",
 	}
 	
 	var rows [][]string
@@ -121,20 +117,10 @@ func (p *XMLParser) parsePacientesXML(data []byte) (*ParsedData, string, error) 
 			paciente.Codigo,
 			paciente.CPF,
 			paciente.NomeCompleto,
-			paciente.RG,
-			paciente.DataNascimento,
 			paciente.Genero,
-			paciente.TipoSanguineo,
-			paciente.Endereco,
 			paciente.CodMunicipio,
-			paciente.CEP,
-			paciente.Telefone,
-			paciente.Email,
-			paciente.ContatoEmergencia,
-			paciente.Convenio,
-			paciente.NumeroCarteira,
-			paciente.Status,
 			paciente.Bairro,
+			paciente.Convenio,
 			paciente.CID10,
 		}
 		rows = append(rows, row)
@@ -295,94 +281,45 @@ func (p *XMLParser) convertToPacientes(parsedData *ParsedData) ([]domain.Pacient
 			} else {
 				paciente.ID = uuid.New()
 			}
+		} else {
+			paciente.ID = uuid.New()
 		}
-		
+
 		// CPF
 		if idx, exists := headerMap["cpf"]; exists && idx < len(row) {
 			paciente.CPF = strings.TrimSpace(row[idx])
 		}
-		
+
 		// Nome
 		if idx, exists := headerMap["nome_completo"]; exists && idx < len(row) {
 			paciente.Nome = strings.TrimSpace(row[idx])
 		}
-		
-		// RG
-		if idx, exists := headerMap["rg"]; exists && idx < len(row) {
-			paciente.RG = strings.TrimSpace(row[idx])
-		}
-		
-		// Data de nascimento
-		if idx, exists := headerMap["data_nascimento"]; exists && idx < len(row) {
-			if dateStr := strings.TrimSpace(row[idx]); dateStr != "" {
-				// Tentar diferentes formatos de data
-				formats := []string{"2006-01-02", "02/01/2006", "02-01-2006"}
-				for _, format := range formats {
-					if date, err := time.Parse(format, dateStr); err == nil {
-						paciente.DataNascimento = date
-						break
-					}
-				}
-			}
-		}
-		
+
 		// Gênero
 		if idx, exists := headerMap["genero"]; exists && idx < len(row) {
 			paciente.Genero = strings.TrimSpace(row[idx])
 		}
-		
-		// Tipo sanguíneo
-		if idx, exists := headerMap["tipo_sanguineo"]; exists && idx < len(row) {
-			paciente.TipoSanguineo = strings.TrimSpace(row[idx])
-		}
-		
-		// Endereço
-		if idx, exists := headerMap["endereco"]; exists && idx < len(row) {
-			paciente.Endereco = strings.TrimSpace(row[idx])
-		}
-		
-		// Município ID
+
+		// Código do município
 		if idx, exists := headerMap["cod_municipio"]; exists && idx < len(row) {
-			if municipioId, err := strconv.Atoi(strings.TrimSpace(row[idx])); err == nil {
-				paciente.MunicipioID = municipioId
-			}
+			paciente.CodMunicipio = strings.TrimSpace(row[idx])
 		}
-		
-		// CEP
-		if idx, exists := headerMap["cep"]; exists && idx < len(row) {
-			paciente.CEP = strings.TrimSpace(row[idx])
+
+		// Bairro
+		if idx, exists := headerMap["bairro"]; exists && idx < len(row) {
+			paciente.Bairro = strings.TrimSpace(row[idx])
 		}
-		
-		// Telefone
-		if idx, exists := headerMap["telefone"]; exists && idx < len(row) {
-			paciente.Telefone = strings.TrimSpace(row[idx])
-		}
-		
-		// Email
-		if idx, exists := headerMap["email"]; exists && idx < len(row) {
-			paciente.Email = strings.TrimSpace(row[idx])
-		}
-		
-		// Contato de emergência
-		if idx, exists := headerMap["contato_emergencia"]; exists && idx < len(row) {
-			paciente.ContatoEmergencia = strings.TrimSpace(row[idx])
-		}
-		
+
 		// Convênio
 		if idx, exists := headerMap["convenio"]; exists && idx < len(row) {
 			paciente.Convenio = strings.TrimSpace(row[idx])
 		}
-		
-		// Número da carteira
-		if idx, exists := headerMap["numero_carteira"]; exists && idx < len(row) {
-			paciente.NumeroCarteira = strings.TrimSpace(row[idx])
+
+		// CID10
+		if idx, exists := headerMap["cid10"]; exists && idx < len(row) {
+			paciente.CID10 = strings.TrimSpace(row[idx])
 		}
-		
-		// Status
-		if idx, exists := headerMap["status"]; exists && idx < len(row) {
-			paciente.Status = strings.TrimSpace(row[idx])
-		}
-		
+
 		// Só adicionar se tiver pelo menos CPF
 		if paciente.CPF != "" {
 			pacientes = append(pacientes, paciente)

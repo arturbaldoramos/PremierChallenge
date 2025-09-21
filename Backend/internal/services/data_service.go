@@ -481,39 +481,33 @@ func (s *DataService) processPacienteBulk(batch []domain.Paciente) (int, int, er
 	var existingCount int64
 	s.db.Model(&domain.Paciente{}).Where("cpf IN ?", existingCPFs).Count(&existingCount)
 
-	// Construir query de bulk insert (usando apenas campos essenciais)
+	// Construir query de bulk insert
 	placeholders := make([]string, len(batch))
-	values := make([]interface{}, 0, len(batch)*11)
+	values := make([]interface{}, 0, len(batch)*8)
 
 	for i, paciente := range batch {
-		placeholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-		values = append(values, 
-			paciente.ID, 
-			paciente.Nome, 
-			paciente.CPF, 
-			paciente.RG, 
-			paciente.DataNascimento, 
-			paciente.Genero, 
-			paciente.TipoSanguineo, 
-			paciente.Endereco, 
-			paciente.MunicipioID, 
-			paciente.CEP, 
-			paciente.Telefone)
+		placeholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?)"
+		values = append(values,
+			paciente.ID,
+			paciente.CPF,
+			paciente.Nome,
+			paciente.Genero,
+			paciente.CodMunicipio,
+			paciente.Bairro,
+			paciente.Convenio,
+			paciente.CID10)
 	}
 
 	query := `
-		INSERT INTO pacientes (id, nome, cpf, rg, data_nascimento, genero, tipo_sanguineo, endereco, municipio_id, cep, telefone)
+		INSERT INTO pacientes (id, cpf, nome, genero, cod_municipio, bairro, convenio, cid10)
 		VALUES ` + strings.Join(placeholders, ", ") + `
 		ON CONFLICT (cpf) DO UPDATE SET
 			nome = EXCLUDED.nome,
-			rg = EXCLUDED.rg,
-			data_nascimento = EXCLUDED.data_nascimento,
 			genero = EXCLUDED.genero,
-			tipo_sanguineo = EXCLUDED.tipo_sanguineo,
-			endereco = EXCLUDED.endereco,
-			municipio_id = EXCLUDED.municipio_id,
-			cep = EXCLUDED.cep,
-			telefone = EXCLUDED.telefone
+			cod_municipio = EXCLUDED.cod_municipio,
+			bairro = EXCLUDED.bairro,
+			convenio = EXCLUDED.convenio,
+			cid10 = EXCLUDED.cid10
 	`
 
 	// Executar bulk insert

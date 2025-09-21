@@ -7,7 +7,6 @@ import (
 	"mime/multipart"
 	"strconv"
 	"strings"
-	"time"
 
 	"example.com/m/v2/internal/domain"
 	"github.com/gocarina/gocsv"
@@ -290,25 +289,15 @@ func (p *CSVParser) ParsePacientes(file *multipart.FileHeader) ([]domain.Pacient
 			pacienteUUID = uuid.New()
 		}
 
-		dataNascimento, _ := time.Parse("2006-01-02", csv.DataNascimento)
-
 		paciente := domain.Paciente{
-			ID:                pacienteUUID,
-			Nome:              csv.Nome,
-			CPF:               csv.CPF,
-			RG:                csv.RG,
-			DataNascimento:    dataNascimento,
-			Genero:            csv.Genero,
-			TipoSanguineo:     csv.TipoSanguineo,
-			Endereco:          csv.Endereco,
-			MunicipioID:       csv.MunicipioID,
-			CEP:               csv.CEP,
-			Telefone:          csv.Telefone,
-			Email:             csv.Email,
-			ContatoEmergencia: csv.ContatoEmergencia,
-			Convenio:          csv.Convenio,
-			NumeroCarteira:    csv.NumeroCarteira,
-			Status:            csv.Status,
+			ID:           pacienteUUID,
+			CPF:          csv.CPF,
+			Nome:         csv.Nome,
+			Genero:       csv.Genero,
+			CodMunicipio: "", // CSV não tem este campo, deixar vazio
+			Bairro:       "", // CSV não tem este campo, deixar vazio
+			Convenio:     csv.Convenio,
+			CID10:        "", // CSV não tem este campo, deixar vazio
 		}
 		pacientes = append(pacientes, paciente)
 	}
