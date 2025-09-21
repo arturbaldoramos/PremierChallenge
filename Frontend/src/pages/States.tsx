@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,10 +15,7 @@ import {
   Search, 
   Filter,
   Download,
-  Upload,
-  FileText,
   FolderOpen,
-  X,
   Globe
 } from "lucide-react"
 import {
@@ -56,15 +53,11 @@ export default function States() {
   const [states, setStates] = useState<State[]>([])
   const [filteredStates, setFilteredStates] = useState<State[]>([])
   const [loading] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [isDragOver, setIsDragOver] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
     regiao: '',
     search: ''
   })
   const [openRegion, setOpenRegion] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
@@ -96,79 +89,6 @@ export default function States() {
     loadStates()
   }, [])
 
-  // Função para processar arquivo (usada tanto para input quanto drag&drop)
-  const processFile = async (file: File) => {
-    if (!file) return
-
-    setUploading(true)
-    setUploadedFile(file)
-
-    try {
-      const response = await api.states.uploadFile(file)
-      
-      // A resposta da API vem no formato { data: [...], success: true, message?: string }
-      const data = response.data as State[]
-      setStates(data)
-      setFilteredStates(data)
-      
-      // Extrair regiões únicas dos dados
-      const uniqueRegions = [...new Set(data.map((s: State) => s.regiao))] as string[]
-      setRegions(uniqueRegions)
-      
-      console.log('Upload realizado com sucesso:', response.message)
-      
-    } catch (error) {
-      console.error('Erro ao fazer upload do arquivo:', error)
-      alert(`Erro ao processar arquivo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  // Função para lidar com upload de arquivo via input
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    await processFile(file)
-    
-    // Limpar input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  // Funções para drag and drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    
-    const droppedFiles = e.dataTransfer.files
-    if (droppedFiles.length > 0) {
-      await processFile(droppedFiles[0]) // Pega apenas o primeiro arquivo
-    }
-  }
-
-  // Função para remover arquivo
-  const removeFile = () => {
-    setUploadedFile(null)
-    setStates([])
-    setFilteredStates([])
-    setRegions([])
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
 
   // Aplicar filtros
   useEffect(() => {
@@ -237,78 +157,6 @@ export default function States() {
         </div>
       </div>
 
-      {/* Área de Upload - só aparece quando não há dados carregados */}
-      {states.length === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Upload de Dados dos Estados
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!uploadedFile ? (
-              <div 
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isDragOver 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-muted-foreground/25 hover:border-muted-foreground/50'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
-                <h3 className="text-lg font-medium mb-2">
-                  {isDragOver ? 'Solte o arquivo aqui' : 'Faça upload do arquivo de estados'}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {isDragOver 
-                    ? 'Arraste e solte o arquivo aqui'
-                    : 'Arraste um arquivo aqui ou selecione com os dados dos estados (CSV, Excel, etc.)'
-                  }
-                </p>
-                <div className="flex items-center justify-center gap-4">
-                  <Button onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Selecionar Arquivo
-                  </Button>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="*/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
-                <div className="flex items-center space-x-3">
-                  <FileText className="h-8 w-8 text-primary" />
-                  <div>
-                    <p className="font-medium">{uploadedFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(uploadedFile.size / 1024).toFixed(2)} KB
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {uploading && (
-                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      <span>Processando...</span>
-                    </div>
-                  )}
-                  <Button variant="outline" size="sm" onClick={removeFile} disabled={uploading}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Informação de sucesso - só aparece quando há dados carregados */}
       {states.length > 0 && (
@@ -510,7 +358,7 @@ export default function States() {
               <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Nenhum estado carregado</h3>
               <p className="text-muted-foreground">
-                Faça upload de um arquivo com os dados dos estados para começar.
+                Nenhum estado encontrado. Use o Gerenciador de Arquivos para fazer upload dos dados.
               </p>
             </div>
           ) : filteredStates.length === 0 ? (
