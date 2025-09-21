@@ -267,3 +267,5 @@ Todas as respostas seguem o formato:
   "error": "string (apenas em caso de erro)"
 }
 ```
+
+
