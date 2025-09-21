@@ -7,7 +7,6 @@ import (
 	"mime/multipart"
 	"strconv"
 	"strings"
-	"time"
 
 	"example.com/m/v2/internal/domain"
 	"github.com/gocarina/gocsv"
@@ -40,13 +39,12 @@ type MunicipioCSV struct {
 }
 
 type HospitalCSV struct {
-	ID             int    `csv:"id"`
-	UUID           string `csv:"uuid"`
+	UUID           string `csv:"codigo"`
 	Nome           string `csv:"nome"`
 	CEP            string `csv:"cep"`
 	Especialidades string `csv:"especialidades"`
 	LeitosTotais   int    `csv:"leitos_totais"`
-	CodMunicipio   string `csv:"cod_municipio"`
+	CodMunicipio   string `csv:"cidade"`
 	Bairro         string `csv:"bairro"`
 }
 
@@ -256,13 +254,13 @@ func (p *CSVParser) ParseHospitais(file *multipart.FileHeader) ([]domain.Hospita
 		}
 
 		hospital := domain.Hospital{
-			ID:           csv.ID,
-			UUID:         hospitalUUID,
-			Nome:         csv.Nome,
-			CEP:          csv.CEP,
-			LeitosTotais: csv.LeitosTotais,
-			CodMunicipio: csv.CodMunicipio,
-			Bairro:       csv.Bairro,
+			UUID:           hospitalUUID,
+			Nome:           csv.Nome,
+			CEP:            csv.CEP,
+			Especialidades: csv.Especialidades,
+			LeitosTotais:   csv.LeitosTotais,
+			CodMunicipio:   csv.CodMunicipio,
+			Bairro:         csv.Bairro,
 		}
 		hospitais = append(hospitais, hospital)
 	}
@@ -291,25 +289,15 @@ func (p *CSVParser) ParsePacientes(file *multipart.FileHeader) ([]domain.Pacient
 			pacienteUUID = uuid.New()
 		}
 
-		dataNascimento, _ := time.Parse("2006-01-02", csv.DataNascimento)
-
 		paciente := domain.Paciente{
-			ID:                pacienteUUID,
-			Nome:              csv.Nome,
-			CPF:               csv.CPF,
-			RG:                csv.RG,
-			DataNascimento:    dataNascimento,
-			Genero:            csv.Genero,
-			TipoSanguineo:     csv.TipoSanguineo,
-			Endereco:          csv.Endereco,
-			MunicipioID:       csv.MunicipioID,
-			CEP:               csv.CEP,
-			Telefone:          csv.Telefone,
-			Email:             csv.Email,
-			ContatoEmergencia: csv.ContatoEmergencia,
-			Convenio:          csv.Convenio,
-			NumeroCarteira:    csv.NumeroCarteira,
-			Status:            csv.Status,
+			ID:           pacienteUUID,
+			CPF:          csv.CPF,
+			Nome:         csv.Nome,
+			Genero:       csv.Genero,
+			CodMunicipio: "", // CSV não tem este campo, deixar vazio
+			Bairro:       "", // CSV não tem este campo, deixar vazio
+			Convenio:     csv.Convenio,
+			CID10:        "", // CSV não tem este campo, deixar vazio
 		}
 		pacientes = append(pacientes, paciente)
 	}

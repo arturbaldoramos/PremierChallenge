@@ -1,6 +1,7 @@
 package services
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -347,30 +348,83 @@ func (s *DataService) BulkInsertHospitais(hospitais []domain.Hospital) error {
 }
 
 func (s *DataService) UpsertHospitais(hospitais []domain.Hospital) (int, int, error) {
+	if len(hospitais) == 0 {
+		return 0, 0, nil
+	}
+
 	var inserted, updated int
 
-	for _, hospital := range hospitais {
-		exists, err := s.HospitalExists(hospital.UUID)
+	// Processar em batches para otimizar performance
+	batchSize := getEnvAsInt("BATCH_SIZE_HOSPITAIS", 150)
+	for i := 0; i < len(hospitais); i += batchSize {
+		end := i + batchSize
+		if end > len(hospitais) {
+			end = len(hospitais)
+		}
+
+		batch := hospitais[i:end]
+		batchInserted, batchUpdated, err := s.processHospitalBulk(batch)
 		if err != nil {
 			return inserted, updated, err
 		}
 
-		if exists {
-			err = s.db.Model(&domain.Hospital{}).Where("uuid = ?", hospital.UUID).Updates(hospital).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			updated++
-		} else {
-			err = s.db.Create(&hospital).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			inserted++
-		}
+		inserted += batchInserted
+		updated += batchUpdated
 	}
 
 	return inserted, updated, nil
+}
+
+// processHospitalBulk executa bulk insert para um batch de hospitais
+func (s *DataService) processHospitalBulk(batch []domain.Hospital) (int, int, error) {
+	if len(batch) == 0 {
+		return 0, 0, nil
+	}
+
+	// Contar registros existentes antes da operação
+	var existingUUIDs []string
+	for _, h := range batch {
+		existingUUIDs = append(existingUUIDs, h.UUID.String())
+	}
+
+	var existingCount int64
+	s.db.Model(&domain.Hospital{}).Where("uuid::text IN ?", existingUUIDs).Count(&existingCount)
+
+	// Construir query de bulk insert
+	placeholders := make([]string, len(batch))
+	values := make([]interface{}, 0, len(batch)*7)
+
+	for i, hospital := range batch {
+		placeholders[i] = "(?, ?, ?, ?, ?, ?, ?)"
+		values = append(values, hospital.UUID, hospital.Nome, hospital.CEP, hospital.Especialidades, hospital.LeitosTotais, hospital.CodMunicipio, hospital.Bairro)
+	}
+
+	query := `
+		INSERT INTO hospitals (uuid, nome, cep, especialidades, leitos_totais, cod_municipio, bairro)
+		VALUES ` + strings.Join(placeholders, ", ") + `
+		ON CONFLICT (uuid) DO UPDATE SET
+			nome = EXCLUDED.nome,
+			cep = EXCLUDED.cep,
+			especialidades = EXCLUDED.especialidades,
+			leitos_totais = EXCLUDED.leitos_totais,
+			cod_municipio = EXCLUDED.cod_municipio,
+			bairro = EXCLUDED.bairro
+	`
+
+	// Executar bulk insert
+	result := s.db.Exec(query, values...)
+	if result.Error != nil {
+		return 0, 0, result.Error
+	}
+
+	// Calcular inserções e atualizações aproximadas
+	batchInserted := len(batch) - int(existingCount)
+	if batchInserted < 0 {
+		batchInserted = 0
+	}
+	batchUpdated := int(existingCount)
+
+	return batchInserted, batchUpdated, nil
 }
 
 // Paciente operations
@@ -385,30 +439,181 @@ func (s *DataService) BulkInsertPacientes(pacientes []domain.Paciente) error {
 }
 
 func (s *DataService) UpsertPacientes(pacientes []domain.Paciente) (int, int, error) {
+	if len(pacientes) == 0 {
+		return 0, 0, nil
+	}
+
 	var inserted, updated int
 
-	for _, paciente := range pacientes {
-		exists, err := s.PacienteExists(paciente.CPF)
+	// Processar em batches para otimizar performance
+	batchSize := getEnvAsInt("BATCH_SIZE_PACIENTES", 250)
+	for i := 0; i < len(pacientes); i += batchSize {
+		end := i + batchSize
+		if end > len(pacientes) {
+			end = len(pacientes)
+		}
+
+		batch := pacientes[i:end]
+		batchInserted, batchUpdated, err := s.processPacienteBulk(batch)
 		if err != nil {
 			return inserted, updated, err
 		}
 
-		if exists {
-			err = s.db.Model(&domain.Paciente{}).Where("cpf = ?", paciente.CPF).Updates(paciente).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			updated++
-		} else {
-			err = s.db.Create(&paciente).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			inserted++
-		}
+		inserted += batchInserted
+		updated += batchUpdated
 	}
 
 	return inserted, updated, nil
+}
+
+// processPacienteBulk executa bulk insert para um batch de pacientes
+func (s *DataService) processPacienteBulk(batch []domain.Paciente) (int, int, error) {
+	if len(batch) == 0 {
+		return 0, 0, nil
+	}
+
+	// Verificar se a coluna cid10 existe na tabela (fazer apenas uma vez)
+	var hasColumn bool
+	err := s.db.Raw("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'pacientes' AND column_name = 'cid10')").Scan(&hasColumn).Error
+	if err != nil {
+		log.Printf("⚠️ Erro ao verificar coluna cid10: %v", err)
+		hasColumn = false
+	}
+
+	// Calcular tamanho máximo do sub-batch baseado no limite de parâmetros do PostgreSQL
+	// PostgreSQL limite: 65535 parâmetros
+	// Cada paciente usa 8 parâmetros (com CID10) ou 7 (sem CID10)
+	parametersPerRecord := 8
+	if !hasColumn {
+		parametersPerRecord = 7
+	}
+	maxSubBatchSize := 65535 / parametersPerRecord
+	if maxSubBatchSize > 1000 {
+		maxSubBatchSize = 1000 // Limite prático para evitar queries muito grandes
+	}
+
+	log.Printf("📊 Processando batch de %d pacientes em sub-batches de %d (hasColumn: %v)",
+		len(batch), maxSubBatchSize, hasColumn)
+
+	var totalInserted, totalUpdated int
+
+	// Processar em sub-batches
+	for i := 0; i < len(batch); i += maxSubBatchSize {
+		end := i + maxSubBatchSize
+		if end > len(batch) {
+			end = len(batch)
+		}
+
+		subBatch := batch[i:end]
+		inserted, updated, err := s.processSubBatchPacientes(subBatch, hasColumn)
+		if err != nil {
+			return totalInserted, totalUpdated, err
+		}
+
+		totalInserted += inserted
+		totalUpdated += updated
+
+		log.Printf("✓ Sub-batch %d-%d processado: %d inseridos, %d atualizados",
+			i+1, end, inserted, updated)
+	}
+
+	return totalInserted, totalUpdated, nil
+}
+
+// processSubBatchPacientes processa um sub-batch menor de pacientes
+func (s *DataService) processSubBatchPacientes(subBatch []domain.Paciente, hasColumn bool) (int, int, error) {
+	if len(subBatch) == 0 {
+		return 0, 0, nil
+	}
+
+	// Contar registros existentes antes da operação
+	var existingCPFs []string
+	for _, p := range subBatch {
+		existingCPFs = append(existingCPFs, p.CPF)
+	}
+
+	var existingCount int64
+	s.db.Model(&domain.Paciente{}).Where("cpf IN ?", existingCPFs).Count(&existingCount)
+
+	// Construir query de bulk insert baseado nas colunas disponíveis
+	var placeholders []string
+	var values []interface{}
+	var query string
+
+	if hasColumn {
+		// Query com CID10
+		placeholders = make([]string, len(subBatch))
+		values = make([]interface{}, 0, len(subBatch)*8)
+
+		for i, paciente := range subBatch {
+			placeholders[i] = "(?, ?, ?, ?, ?, ?, ?, ?)"
+			values = append(values,
+				paciente.ID,
+				paciente.CPF,
+				paciente.Nome,
+				paciente.Genero,
+				paciente.CodMunicipio,
+				paciente.Bairro,
+				paciente.Convenio,
+				paciente.CID10)
+		}
+
+		query = `
+			INSERT INTO pacientes (id, cpf, nome, genero, cod_municipio, bairro, convenio, cid10)
+			VALUES ` + strings.Join(placeholders, ", ") + `
+			ON CONFLICT (cpf) DO UPDATE SET
+				nome = EXCLUDED.nome,
+				genero = EXCLUDED.genero,
+				cod_municipio = EXCLUDED.cod_municipio,
+				bairro = EXCLUDED.bairro,
+				convenio = EXCLUDED.convenio,
+				cid10 = EXCLUDED.cid10
+		`
+	} else {
+		// Query sem CID10 (fallback para compatibilidade)
+		log.Printf("⚠️ Usando fallback sem CID10")
+
+		placeholders = make([]string, len(subBatch))
+		values = make([]interface{}, 0, len(subBatch)*7)
+
+		for i, paciente := range subBatch {
+			placeholders[i] = "(?, ?, ?, ?, ?, ?, ?)"
+			values = append(values,
+				paciente.ID,
+				paciente.CPF,
+				paciente.Nome,
+				paciente.Genero,
+				paciente.CodMunicipio,
+				paciente.Bairro,
+				paciente.Convenio)
+		}
+
+		query = `
+			INSERT INTO pacientes (id, cpf, nome, genero, cod_municipio, bairro, convenio)
+			VALUES ` + strings.Join(placeholders, ", ") + `
+			ON CONFLICT (cpf) DO UPDATE SET
+				nome = EXCLUDED.nome,
+				genero = EXCLUDED.genero,
+				cod_municipio = EXCLUDED.cod_municipio,
+				bairro = EXCLUDED.bairro,
+				convenio = EXCLUDED.convenio
+		`
+	}
+
+	// Executar bulk insert
+	result := s.db.Exec(query, values...)
+	if result.Error != nil {
+		return 0, 0, result.Error
+	}
+
+	// Calcular inserções e atualizações aproximadas
+	subBatchInserted := len(subBatch) - int(existingCount)
+	if subBatchInserted < 0 {
+		subBatchInserted = 0
+	}
+	subBatchUpdated := int(existingCount)
+
+	return subBatchInserted, subBatchUpdated, nil
 }
 
 // Medico operations
@@ -630,28 +835,81 @@ func (s *DataService) BulkInsertCID10(cid10s []domain.Cid10) error {
 }
 
 func (s *DataService) UpsertCID10(cid10s []domain.Cid10) (int, int, error) {
+	if len(cid10s) == 0 {
+		return 0, 0, nil
+	}
+
 	var inserted, updated int
 
-	for _, cid10 := range cid10s {
-		exists, err := s.CID10Exists(cid10.Codigo)
+	// Processar em batches para otimizar performance
+	batchSize := getEnvAsInt("BATCH_SIZE_CID10", 400)
+	for i := 0; i < len(cid10s); i += batchSize {
+		end := i + batchSize
+		if end > len(cid10s) {
+			end = len(cid10s)
+		}
+
+		batch := cid10s[i:end]
+		batchInserted, batchUpdated, err := s.processCID10Bulk(batch)
 		if err != nil {
 			return inserted, updated, err
 		}
 
-		if exists {
-			err = s.db.Model(&domain.Cid10{}).Where("codigo = ?", cid10.Codigo).Updates(cid10).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			updated++
-		} else {
-			err = s.db.Create(&cid10).Error
-			if err != nil {
-				return inserted, updated, err
-			}
-			inserted++
-		}
+		inserted += batchInserted
+		updated += batchUpdated
 	}
 
 	return inserted, updated, nil
+}
+
+// processCID10Bulk executa bulk insert para um batch de CID10
+func (s *DataService) processCID10Bulk(batch []domain.Cid10) (int, int, error) {
+	if len(batch) == 0 {
+		return 0, 0, nil
+	}
+
+	// Contar registros existentes antes da operação
+	var existingCodes []string
+	for _, c := range batch {
+		existingCodes = append(existingCodes, c.Codigo)
+	}
+
+	var existingCount int64
+	s.db.Model(&domain.Cid10{}).Where("codigo IN ?", existingCodes).Count(&existingCount)
+	
+	// Log para debug
+	log.Printf("🔍 DEBUG CID10: Batch de %d registros, %d já existem no banco", len(batch), existingCount)
+
+	// Construir query de bulk insert
+	placeholders := make([]string, len(batch))
+	values := make([]interface{}, 0, len(batch)*5)
+
+	for i, cid10 := range batch {
+		placeholders[i] = "(?, ?, ?, ?, ?)"
+		values = append(values, cid10.ID, cid10.Codigo, cid10.Descricao, cid10.Categoria, cid10.Grupo)
+	}
+
+	query := `
+		INSERT INTO cid10 (id, codigo, descricao, categoria, grupo)
+		VALUES ` + strings.Join(placeholders, ", ") + `
+		ON CONFLICT (codigo) DO UPDATE SET
+			descricao = EXCLUDED.descricao,
+			categoria = EXCLUDED.categoria,
+			grupo = EXCLUDED.grupo
+	`
+
+	// Executar bulk insert
+	result := s.db.Exec(query, values...)
+	if result.Error != nil {
+		return 0, 0, result.Error
+	}
+
+	// Calcular inserções e atualizações aproximadas
+	batchInserted := len(batch) - int(existingCount)
+	if batchInserted < 0 {
+		batchInserted = 0
+	}
+	batchUpdated := int(existingCount)
+
+	return batchInserted, batchUpdated, nil
 }

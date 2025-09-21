@@ -61,7 +61,7 @@ export default function FileManager() {
       case 'csv': return <FileSpreadsheet className="h-6 w-6 text-green-500" />;
       case 'json': return <FileCode className="h-6 w-6 text-yellow-500" />;
       case 'xml': return <FileCode className="h-6 w-6 text-blue-500" />;
-      default: return <FileText className="h-6 w-6 text-gray-500" />;
+      default: return <FileText className="h-6 w-6 text-muted-foreground" />;
     }
   };
 
@@ -416,10 +416,10 @@ export default function FileManager() {
                       <div key={file.id} className="border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-3">
-                            {file.fileType ? getFileIcon(file.fileType) : <FileText className="h-6 w-6 text-gray-500" />}
+                            {file.fileType ? getFileIcon(file.fileType) : <FileText className="h-6 w-6 text-muted-foreground" />}
                             <div>
                               <p className="font-medium">{file.name}</p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-muted-foreground">
                                 {formatFileSize(file.size)} • {file.fileType?.description || 'Tipo desconhecido'}
                               </p>
                             </div>
@@ -475,8 +475,8 @@ export default function FileManager() {
                           <div className="flex items-center gap-2">
                             {file.status === 'pending' && (
                               <>
-                                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                                <span className="text-sm text-gray-600">Aguardando processamento</span>
+                        <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
+                        <span className="text-sm text-muted-foreground">Aguardando processamento</span>
                               </>
                             )}
                             {file.status === 'processing' && (

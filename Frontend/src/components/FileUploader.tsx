@@ -1,12 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, File, AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Upload, File, AlertCircle, CheckCircle2, Loader2, X, FileText, FileSpreadsheet, FileCode, FileImage, FileArchive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useWebSocket, type UploadProgress } from '@/hooks/useWebSocket';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 export interface FileType {
   id: string;
@@ -20,37 +19,37 @@ export const FILE_TYPES: FileType[] = [
     id: 'estados',
     label: 'Estados',
     description: 'Dados dos estados brasileiros',
-    acceptedTypes: ['.csv']
+    acceptedTypes: ['.csv', '.xlsx', '.json', '.xml', '.txt']
   },
   {
     id: 'municipios',
     label: 'Municípios',
     description: 'Dados dos municípios brasileiros',
-    acceptedTypes: ['.csv']
+    acceptedTypes: ['.csv', '.xlsx', '.json', '.xml', '.txt']
   },
   {
     id: 'medicos',
     label: 'Médicos',
     description: 'Cadastro de médicos',
-    acceptedTypes: ['.csv']
+    acceptedTypes: ['.csv', '.xlsx', '.json', '.xml', '.txt']
   },
   {
     id: 'hospitais',
     label: 'Hospitais',
     description: 'Cadastro de hospitais',
-    acceptedTypes: ['.csv']
+    acceptedTypes: ['.csv', '.xlsx', '.json', '.xml', '.txt']
   },
   {
     id: 'pacientes',
     label: 'Pacientes',
     description: 'Cadastro de pacientes',
-    acceptedTypes: ['.csv']
+    acceptedTypes: ['.csv', '.xlsx', '.json', '.xml', '.txt']
   },
   {
     id: 'cid10',
     label: 'CID-10',
     description: 'Códigos de classificação de doenças',
-    acceptedTypes: ['.csv']
+    acceptedTypes: ['.csv', '.xlsx', '.json', '.xml', '.txt']
   }
 ];
 
@@ -69,6 +68,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const [selectedFileType, setSelectedFileType] = useState<string>('estados');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   console.log('FileUploader renderizado com URL:', websocketUrl);
 
@@ -89,10 +89,85 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     autoConnect: true
   });
 
+  // Função para detectar tipo de arquivo e obter ícone
+  const getFileIcon = useCallback((fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'csv':
+        return <FileSpreadsheet className="w-4 h-4 text-green-500" />;
+      case 'xlsx':
+      case 'xls':
+        return <FileSpreadsheet className="w-4 h-4 text-green-600" />;
+      case 'json':
+        return <FileCode className="w-4 h-4 text-yellow-500" />;
+      case 'xml':
+        return <FileCode className="w-4 h-4 text-blue-500" />;
+      case 'txt':
+        return <FileText className="w-4 h-4 text-muted-foreground" />;
+      case 'pdf':
+        return <FileImage className="w-4 h-4 text-red-500" />;
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return <FileArchive className="w-4 h-4 text-purple-500" />;
+      default:
+        return <File className="w-4 h-4 text-muted-foreground" />;
+    }
+  }, []);
+
+  // Função para obter descrição do tipo de arquivo
+  const getFileTypeDescription = useCallback((fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'csv':
+        return 'Arquivo CSV (Comma Separated Values)';
+      case 'xlsx':
+      case 'xls':
+        return 'Planilha Excel';
+      case 'json':
+        return 'Arquivo JSON (JavaScript Object Notation)';
+      case 'xml':
+        return 'Arquivo XML (eXtensible Markup Language)';
+      case 'txt':
+        return 'Arquivo de texto';
+      case 'pdf':
+        return 'Documento PDF (Portable Document Format)';
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return 'Arquivo compactado';
+      default:
+        return 'Arquivo desconhecido';
+    }
+  }, []);
+
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
+    }
+  }, []);
+
+  // Funções para drag and drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const droppedFiles = e.dataTransfer.files;
+    if (droppedFiles.length > 0) {
+      setSelectedFile(droppedFiles[0]);
     }
   }, []);
 
@@ -168,7 +243,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         <div className="flex justify-between items-center">
           <CardTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5" />
-            Upload de Arquivos CSV
+            Upload de Arquivos
           </CardTitle>
           {getStatusBadge()}
         </div>
@@ -206,56 +281,68 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         {/* Seleção do Tipo de Arquivo */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Tipo de Arquivo</label>
-          <Select value={selectedFileType} onValueChange={setSelectedFileType}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o tipo de arquivo" />
-            </SelectTrigger>
-            <SelectContent>
-              {FILE_TYPES.map((fileType) => (
-                <SelectItem key={fileType.id} value={fileType.id}>
-                  <div>
-                    <div className="font-medium">{fileType.label}</div>
-                    <div className="text-xs text-muted-foreground">{fileType.description}</div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap gap-2">
+            {FILE_TYPES.map((fileType) => (
+              <Button
+                key={fileType.id}
+                variant={selectedFileType === fileType.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedFileType(fileType.id)}
+                className="text-xs"
+              >
+                {fileType.label}
+              </Button>
+            ))}
+          </div>
+          {selectedFileTypeData && (
+            <p className="text-xs text-muted-foreground">
+              {selectedFileTypeData.description}
+            </p>
+          )}
         </div>
 
         {/* Seleção de Arquivo */}
         <div className="space-y-2">
-          <label className="text-sm font-medium">Arquivo CSV</label>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+          <label className="text-sm font-medium">Arquivo</label>
+          <div 
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              isDragOver
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-border/80'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <input
               id="file-input"
               type="file"
-              accept={selectedFileTypeData?.acceptedTypes.join(',') || '.csv'}
+              accept="*/*"
               onChange={handleFileSelect}
               className="hidden"
             />
             <label htmlFor="file-input" className="cursor-pointer">
-              <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-              <p className="text-sm text-gray-600">
-                Clique para selecionar um arquivo CSV
+              <Upload className={`w-8 h-8 mx-auto mb-2 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
+              <p className={`text-sm ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`}>
+                {isDragOver ? 'Solte o arquivo aqui' : 'Clique para selecionar ou arraste um arquivo'}
               </p>
-              {selectedFileTypeData && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Tipos aceitos: {selectedFileTypeData.acceptedTypes.join(', ')}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Tipos aceitos: CSV, XLSX, JSON, XML, TXT, PDF e outros
+              </p>
             </label>
           </div>
         </div>
 
         {/* Arquivo Selecionado */}
         {selectedFile && (
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <div className="flex items-center gap-2">
-              <File className="w-4 h-4 text-blue-500" />
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center gap-3">
+              {getFileIcon(selectedFile.name)}
               <div>
                 <p className="text-sm font-medium">{selectedFile.name}</p>
-                <p className="text-xs text-gray-500">{formatFileSize(selectedFile.size)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatFileSize(selectedFile.size)} • {getFileTypeDescription(selectedFile.name)}
+                </p>
               </div>
             </div>
             <Button
@@ -313,7 +400,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
             <h4 className="text-sm font-medium">Status das Filas</h4>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(queueStatus).map(([queue, count]) => (
-                <div key={queue} className="flex justify-between p-2 bg-gray-50 rounded">
+                <div key={queue} className="flex justify-between p-2 bg-muted/50 rounded">
                   <span className="text-sm capitalize">{queue}</span>
                   <Badge variant="outline">{count} jobs</Badge>
                 </div>
@@ -336,13 +423,13 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
                     </Badge>
                   </div>
                   <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-gray-600">
+                    <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{job.processed_items} de {job.total_items} processados</span>
                       <span>{job.progress}%</span>
                     </div>
                     <Progress value={job.progress} className="h-2" />
                     {job.message && (
-                      <p className="text-xs text-gray-500">{job.message}</p>
+                      <p className="text-xs text-muted-foreground">{job.message}</p>
                     )}
                   </div>
                 </div>
@@ -361,7 +448,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
         {/* Informações da Sessão */}
         {sessionId && (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-muted-foreground">
             Session ID: {sessionId}
           </div>
         )}

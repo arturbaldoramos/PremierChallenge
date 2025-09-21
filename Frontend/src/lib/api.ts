@@ -1,5 +1,6 @@
 // Configuração base da API
-const API_BASE_URL = 'http://localhost:8080/api/v1/upload/'
+const API_BASE_URL = '/api/v1/upload/'
+const STATS_API_BASE_URL = '/api/v1/stats/'
 
 // Tipos para as respostas da API
 export interface ApiResponse<T> {
@@ -14,7 +15,18 @@ export interface ApiErrorResponse {
   error?: string
 }
 
-// Classe de erro personalizada
+// Importar tipos de estatísticas
+import type { 
+  StatsResponse,
+  StatsByStateResponse,
+  HospitalBySpecialtyResponse,
+  HospitalByMunicipalityResponse,
+  DoctorDistributionResponse,
+  SpecialtiesResponse,
+  HospitalBySpecialtyFilterResponse,
+  HospitalByMunicipalityFilterResponse
+} from '@/types/stats'
+
 class ApiError extends Error {
   public status: number
   public error?: string
@@ -141,6 +153,118 @@ class ApiClient {
 // Instância singleton do cliente API
 export const apiClient = new ApiClient()
 
+// Cliente específico para estatísticas
+class StatsApiClient {
+  private baseUrl: string
+
+  constructor(baseUrl: string = STATS_API_BASE_URL) {
+    this.baseUrl = baseUrl
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint.slice(1) : endpoint}`
+    
+    const defaultHeaders = {
+      'Content-Type': 'application/json',
+    }
+
+    const config: RequestInit = {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+    }
+
+    try {
+      const response = await fetch(url, config)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new ApiError(
+          errorData.message || `HTTP Error: ${response.status}`,
+          response.status,
+          errorData.error
+        )
+      }
+
+      return await response.json()
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error
+      }
+      
+      // Log detalhado do erro de rede
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new ApiError(
+          `Erro de rede: ${error.message}. Verifique se o backend está rodando em http://localhost:8080`,
+          0
+        )
+      }
+      
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Erro desconhecido',
+        0
+      )
+    }
+  }
+
+  async getTotals(): Promise<StatsResponse> {
+    return this.request<StatsResponse>('/totals', {
+      method: 'GET',
+    })
+  }
+
+  async getHospitalsByState(): Promise<StatsByStateResponse> {
+    return this.request<StatsByStateResponse>('/hospitais-por-estado', {
+      method: 'GET',
+    })
+  }
+
+  async getDoctorsByState(): Promise<StatsByStateResponse> {
+    return this.request<StatsByStateResponse>('/medicos-por-estado', {
+      method: 'GET',
+    })
+  }
+
+  async getHospitalsBySpecialty(specialty?: string): Promise<HospitalBySpecialtyResponse | HospitalBySpecialtyFilterResponse> {
+    const endpoint = specialty 
+      ? `/hospitais-por-especialidade?especialidade=${encodeURIComponent(specialty)}`
+      : '/hospitais-por-especialidade'
+    
+    return this.request<HospitalBySpecialtyResponse | HospitalBySpecialtyFilterResponse>(endpoint, {
+      method: 'GET',
+    })
+  }
+
+  async getHospitalsByMunicipality(municipality?: string): Promise<HospitalByMunicipalityResponse | HospitalByMunicipalityFilterResponse> {
+    const endpoint = municipality 
+      ? `/hospitais-por-municipio?municipio=${encodeURIComponent(municipality)}`
+      : '/hospitais-por-municipio'
+    
+    return this.request<HospitalByMunicipalityResponse | HospitalByMunicipalityFilterResponse>(endpoint, {
+      method: 'GET',
+    })
+  }
+
+  async getDoctorDistribution(): Promise<DoctorDistributionResponse> {
+    return this.request<DoctorDistributionResponse>('/medicos-distribuicao', {
+      method: 'GET',
+    })
+  }
+
+  async getSpecialties(): Promise<SpecialtiesResponse> {
+    return this.request<SpecialtiesResponse>('/especialidades', {
+      method: 'GET',
+    })
+  }
+}
+
+export const statsApiClient = new StatsApiClient()
+
 // Funções utilitárias para entidades específicas
 export const api = {
   // Hospitais
@@ -201,6 +325,17 @@ export const api = {
     update: (id: string | number, data: any) => apiClient.put('cid', id, data),
     delete: (id: string | number) => apiClient.delete('cid', id),
     uploadFile: (file: File) => apiClient.post('cid', file),
+  },
+
+  // Estatísticas
+  stats: {
+    getTotals: () => statsApiClient.getTotals(),
+    getHospitalsByState: () => statsApiClient.getHospitalsByState(),
+    getDoctorsByState: () => statsApiClient.getDoctorsByState(),
+    getHospitalsBySpecialty: (specialty?: string) => statsApiClient.getHospitalsBySpecialty(specialty),
+    getHospitalsByMunicipality: (municipality?: string) => statsApiClient.getHospitalsByMunicipality(municipality),
+    getDoctorDistribution: () => statsApiClient.getDoctorDistribution(),
+    getSpecialties: () => statsApiClient.getSpecialties(),
   },
 }
 

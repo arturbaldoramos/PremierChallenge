@@ -23,7 +23,7 @@ export default function Orders() {
       case "Cancelado":
         return <CreditCard className="h-4 w-4 text-red-500" />
       default:
-        return <Package className="h-4 w-4 text-gray-500" />
+        return <Package className="h-4 w-4 text-muted-foreground" />
     }
   }
 

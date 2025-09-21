@@ -8,7 +8,6 @@ const Hospitals = lazy(() => import('@/pages/Hospitals'))
 const Doctors = lazy(() => import('@/pages/Doctors'))
 const States = lazy(() => import('@/pages/States'))
 const FileManager = lazy(() => import('@/pages/FileManager'))
-const DataUpload = lazy(() => import('@/pages/DataUpload'))
 const Analytics = lazy(() => import('@/pages/Analytics'))
 const Reports = lazy(() => import('@/pages/Reports'))
 const Users = lazy(() => import('@/pages/Users'))
@@ -75,16 +74,6 @@ function App() {
                    <DashboardLayout>
                      <Suspense fallback={<LoadingFallback />}>
                        <FileManager />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/data-upload"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <DataUpload />
                      </Suspense>
                    </DashboardLayout>
                  }
