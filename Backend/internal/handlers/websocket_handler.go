@@ -32,12 +32,13 @@ func getEnvAsInt(key string, defaultValue int) int {
 }
 
 type WebSocketHandler struct {
-	upgrader     websocket.Upgrader
-	redisService *services.RedisService
-	dataService  *services.DataService
-	csvParser    *parsers.CSVParser
-	connections  map[string]*Connection
-	mu           sync.RWMutex
+	upgrader      websocket.Upgrader
+	redisService  *services.RedisService
+	dataService   *services.DataService
+	csvParser     *parsers.CSVParser
+	unifiedParser *parsers.UnifiedParser
+	connections   map[string]*Connection
+	mu            sync.RWMutex
 }
 
 type Connection struct {
@@ -94,10 +95,11 @@ func NewWebSocketHandler(redisService *services.RedisService, dataService *servi
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
-		redisService: redisService,
-		dataService:  dataService,
-		csvParser:    parsers.NewCSVParser(),
-		connections:  make(map[string]*Connection),
+		redisService:  redisService,
+		dataService:   dataService,
+		csvParser:     parsers.NewCSVParser(),
+		unifiedParser: parsers.NewUnifiedParser(),
+		connections:   make(map[string]*Connection),
 	}
 }
 
@@ -350,6 +352,656 @@ func min(a, b int) int {
 }
 
 func (h *WebSocketHandler) processUploadedData(sessionID, fileType, csvData string) error {
+	// Tentar usar o parser unificado primeiro
+	data := []byte(csvData)
+	filename := fmt.Sprintf("%s.unknown", fileType) // Simular filename para detecção
+	
+	parsedData, detectedFormat, err := h.unifiedParser.ParseFile(data, filename)
+	if err == nil {
+		log.Printf("✓ Formato detectado automaticamente: %s", detectedFormat.String())
+		return h.processUnifiedData(sessionID, fileType, parsedData, detectedFormat)
+	}
+
+	log.Printf("⚠ Parser unificado falhou (%v), usando parser legado", err)
+	
+	// Fallback para o processamento legado
+	return h.processUploadedDataLegacy(sessionID, fileType, csvData)
+}
+
+// processUnifiedData processa dados usando o parser unificado
+func (h *WebSocketHandler) processUnifiedData(sessionID, fileType string, parsedData *parsers.ParsedData, format parsers.FileFormat) error {
+	log.Printf("Processando dados unificados - Tipo: %s, Formato: %s, Linhas: %d, Colunas: %d", 
+		fileType, format.String(), len(parsedData.Rows), len(parsedData.Headers))
+
+	// Log dos headers detectados
+	log.Printf("Headers detectados: %v", parsedData.Headers)
+
+	// Configuração de batch por tipo
+	batchSizes := map[string]int{
+		"estados":    getEnvAsInt("BATCH_SIZE_ESTADOS", 50),
+		"municipios": getEnvAsInt("BATCH_SIZE_MUNICIPIOS", 200),
+		"medicos":    getEnvAsInt("BATCH_SIZE_MEDICOS", 300),
+		"hospitais":  getEnvAsInt("BATCH_SIZE_HOSPITAIS", 150),
+		"pacientes":  getEnvAsInt("BATCH_SIZE_PACIENTES", 250),
+		"cid10":      getEnvAsInt("BATCH_SIZE_CID10", 400),
+	}
+
+	batchSize := batchSizes[fileType]
+	if batchSize == 0 {
+		batchSize = 100 // Default
+	}
+
+	// Processar baseado no tipo normalizado
+	normalizedType := strings.ToLower(strings.TrimSpace(fileType))
+	
+	// Para FHIR, primeiro tentar mapear automaticamente
+	if format == parsers.FormatFHIRJSON || format == parsers.FormatFHIRXML {
+		return h.processFHIRData(sessionID, parsedData, batchSize)
+	}
+
+	// Para outros formatos, usar conversão baseada no tipo
+	switch normalizedType {
+	case "hospitais", "hospitals":
+		return h.processUnifiedHospitals(sessionID, parsedData, batchSize)
+	case "pacientes", "patients":
+		return h.processUnifiedPatients(sessionID, parsedData, batchSize)
+	case "medicos", "doctors", "practitioners":
+		return h.processUnifiedMedicos(sessionID, parsedData, batchSize)
+	case "municipios", "municipalities":
+		return h.processUnifiedMunicipios(sessionID, parsedData, batchSize)
+	case "estados", "states":
+		return h.processUnifiedEstados(sessionID, parsedData, batchSize)
+	case "cid10":
+		return h.processUnifiedCID10(sessionID, parsedData, batchSize)
+	default:
+		return fmt.Errorf("tipo não suportado pelo parser unificado: %s", fileType)
+	}
+}
+
+// processUnifiedHospitals processa hospitais usando dados unificados
+func (h *WebSocketHandler) processUnifiedHospitals(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	hospitais, err := h.convertRowsToHospitals(parsedData)
+	if err != nil {
+		return fmt.Errorf("erro ao converter dados para hospitais: %v", err)
+	}
+
+	if len(hospitais) == 0 {
+		return fmt.Errorf("nenhum hospital válido encontrado nos dados")
+	}
+
+	totalItems := len(hospitais)
+	totalBatches := (totalItems + batchSize - 1) / batchSize
+
+	log.Printf("Processando %d hospitais em %d batches para sessão %s", totalItems, totalBatches, sessionID)
+
+	for i := 0; i < totalBatches; i++ {
+		start := i * batchSize
+		end := start + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batchHospitais := hospitais[start:end]
+
+		jobID := uuid.New().String()
+		job := &services.Job{
+			ID:         jobID,
+			Type:       "hospitais",
+			Status:     services.JobStatusPending,
+			TotalItems: len(batchHospitais),
+			CreatedAt:  time.Now(),
+			SessionID:  sessionID,
+		}
+
+		batchDataBytes, err := json.Marshal(batchHospitais)
+		if err != nil {
+			return fmt.Errorf("erro ao serializar batch: %v", err)
+		}
+
+		batchData := services.BatchData{
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
+			Data:         batchDataBytes,
+		}
+
+		data, _ := json.Marshal(batchData)
+		job.Data = data
+
+		err = h.redisService.EnqueueJob(job)
+		if err != nil {
+			return fmt.Errorf("erro ao enfileirar job: %v", err)
+		}
+
+		log.Printf("✓ Batch %d/%d enfileirado com %d hospitais", i+1, totalBatches, len(batchHospitais))
+	}
+
+	return nil
+}
+
+// convertRowsToHospitals converte dados tabulares para hospitais
+func (h *WebSocketHandler) convertRowsToHospitals(parsedData *parsers.ParsedData) ([]domain.Hospital, error) {
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range parsedData.Headers {
+		cleanHeader := strings.ToLower(strings.TrimSpace(header))
+		headerMap[cleanHeader] = i
+	}
+
+	var hospitais []domain.Hospital
+
+	for rowIndex, row := range parsedData.Rows {
+		if len(row) == 0 {
+			continue
+		}
+
+		hospital := domain.Hospital{}
+
+		// UUID/Código
+		if idx, exists := headerMap["codigo"]; exists && idx < len(row) {
+			uuidStr := strings.TrimSpace(row[idx])
+			if uuidStr != "" {
+				if parsedUUID, err := uuid.Parse(uuidStr); err == nil {
+					hospital.UUID = parsedUUID
+				} else {
+					hospital.UUID = uuid.New()
+				}
+			} else {
+				hospital.UUID = uuid.New()
+			}
+		} else {
+			hospital.UUID = uuid.New()
+		}
+
+		// Nome
+		nomeFields := []string{"nome", "hospital_nome", "hospital", "name", "hospital_name"}
+		for _, field := range nomeFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				hospital.Nome = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// CEP
+		cepFields := []string{"cep", "zipcode", "postal_code"}
+		for _, field := range cepFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				hospital.CEP = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Especialidades
+		especialidadeFields := []string{"especialidades", "specialties", "services", "servicos"}
+		for _, field := range especialidadeFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				hospital.Especialidades = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Leitos totais
+		leitosFields := []string{"leitos_totais", "leitos", "beds", "total_beds"}
+		for _, field := range leitosFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				if leitos, err := strconv.Atoi(strings.TrimSpace(row[idx])); err == nil {
+					hospital.LeitosTotais = leitos
+				}
+				break
+			}
+		}
+
+		// Código do município
+		municipioFields := []string{"cidade", "cod_municipio", "codigo_municipio", "municipio_id", "city", "city_code"}
+		for _, field := range municipioFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				hospital.CodMunicipio = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Bairro
+		bairroFields := []string{"bairro", "district", "neighborhood"}
+		for _, field := range bairroFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				hospital.Bairro = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Só adicionar se tiver pelo menos nome
+		if hospital.Nome != "" {
+			hospitais = append(hospitais, hospital)
+		} else {
+			log.Printf("⚠ Linha %d ignorada - hospital sem nome", rowIndex+1)
+		}
+	}
+
+	return hospitais, nil
+}
+
+// processUnifiedPatients processa pacientes usando dados unificados
+func (h *WebSocketHandler) processUnifiedPatients(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	// Verificar se é XML estruturado e usar converter específico
+	if detectedType, exists := parsedData.Metadata["detected_type"]; exists && detectedType == "pacientes" {
+		return h.processUnifiedPatientsFromXML(sessionID, parsedData, batchSize)
+	}
+	
+	// Fallback para conversão genérica
+	pacientes, err := h.convertRowsToPatients(parsedData)
+	if err != nil {
+		return fmt.Errorf("erro ao converter dados para pacientes: %v", err)
+	}
+
+	if len(pacientes) == 0 {
+		return fmt.Errorf("nenhum paciente válido encontrado nos dados")
+	}
+
+	return h.enqueuePatientsJobs(sessionID, pacientes, batchSize)
+}
+
+// processUnifiedPatientsFromXML processa pacientes usando converter XML específico
+func (h *WebSocketHandler) processUnifiedPatientsFromXML(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	// Usar o converter XML específico
+	xmlParser := parsers.NewXMLParser()
+	pacientes, err := xmlParser.ConvertXMLToDomain(parsedData, "pacientes")
+	if err != nil {
+		return fmt.Errorf("erro ao converter XML para pacientes: %v", err)
+	}
+
+	pacientesList, ok := pacientes.([]domain.Paciente)
+	if !ok {
+		return fmt.Errorf("erro de tipo na conversão de pacientes")
+	}
+
+	if len(pacientesList) == 0 {
+		return fmt.Errorf("nenhum paciente válido encontrado no XML")
+	}
+
+	log.Printf("✓ Convertidos %d pacientes do XML estruturado", len(pacientesList))
+	
+	return h.enqueuePatientsJobs(sessionID, pacientesList, batchSize)
+}
+
+// enqueuePatientsJobs enfileira jobs de pacientes
+func (h *WebSocketHandler) enqueuePatientsJobs(sessionID string, pacientes []domain.Paciente, batchSize int) error {
+	totalItems := len(pacientes)
+	totalBatches := (totalItems + batchSize - 1) / batchSize
+
+	log.Printf("Processando %d pacientes em %d batches para sessão %s", totalItems, totalBatches, sessionID)
+
+	for i := 0; i < totalBatches; i++ {
+		start := i * batchSize
+		end := start + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batchPacientes := pacientes[start:end]
+
+		jobID := uuid.New().String()
+		job := &services.Job{
+			ID:         jobID,
+			Type:       "pacientes",
+			Status:     services.JobStatusPending,
+			TotalItems: len(batchPacientes),
+			CreatedAt:  time.Now(),
+			SessionID:  sessionID,
+		}
+
+		batchDataBytes, err := json.Marshal(batchPacientes)
+		if err != nil {
+			return fmt.Errorf("erro ao serializar batch: %v", err)
+		}
+
+		batchData := services.BatchData{
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
+			Data:         batchDataBytes,
+		}
+
+		data, _ := json.Marshal(batchData)
+		job.Data = data
+
+		err = h.redisService.EnqueueJob(job)
+		if err != nil {
+			return fmt.Errorf("erro ao enfileirar job: %v", err)
+		}
+
+		log.Printf("✓ Batch %d/%d enfileirado com %d pacientes", i+1, totalBatches, len(batchPacientes))
+	}
+
+	return nil
+}
+
+// convertRowsToPatients converte dados tabulares genéricos para pacientes
+func (h *WebSocketHandler) convertRowsToPatients(parsedData *parsers.ParsedData) ([]domain.Paciente, error) {
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range parsedData.Headers {
+		cleanHeader := strings.ToLower(strings.TrimSpace(header))
+		headerMap[cleanHeader] = i
+	}
+
+	var pacientes []domain.Paciente
+
+	for rowIndex, row := range parsedData.Rows {
+		if len(row) == 0 {
+			continue
+		}
+
+		paciente := domain.Paciente{}
+
+		// ID/Código (UUID)
+		if idx, exists := headerMap["codigo"]; exists && idx < len(row) {
+			uuidStr := strings.TrimSpace(row[idx])
+			if uuidStr != "" {
+				if parsedUUID, err := uuid.Parse(uuidStr); err == nil {
+					paciente.ID = parsedUUID
+				} else {
+					paciente.ID = uuid.New()
+				}
+			} else {
+				paciente.ID = uuid.New()
+			}
+		} else {
+			paciente.ID = uuid.New()
+		}
+
+		// CPF
+		cpfFields := []string{"cpf", "documento", "doc"}
+		for _, field := range cpfFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				paciente.CPF = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Nome
+		nomeFields := []string{"nome", "nome_completo", "name", "full_name", "patient_name"}
+		for _, field := range nomeFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				paciente.Nome = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// RG
+		rgFields := []string{"rg", "identity", "id_number"}
+		for _, field := range rgFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				paciente.RG = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Data de nascimento
+		dataFields := []string{"data_nascimento", "birthdate", "birth_date", "dob"}
+		for _, field := range dataFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				if dateStr := strings.TrimSpace(row[idx]); dateStr != "" {
+					formats := []string{"2006-01-02", "02/01/2006", "02-01-2006", "2006/01/02"}
+					for _, format := range formats {
+						if date, err := time.Parse(format, dateStr); err == nil {
+							paciente.DataNascimento = date
+							break
+						}
+					}
+				}
+				break
+			}
+		}
+
+		// Gênero
+		generoFields := []string{"genero", "gender", "sex", "sexo"}
+		for _, field := range generoFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				paciente.Genero = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Só adicionar se tiver pelo menos CPF e nome
+		if paciente.CPF != "" && paciente.Nome != "" {
+			pacientes = append(pacientes, paciente)
+		} else {
+			log.Printf("⚠ Linha %d ignorada - paciente sem CPF ou nome", rowIndex+1)
+		}
+	}
+
+	return pacientes, nil
+}
+
+func (h *WebSocketHandler) processUnifiedMedicos(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	return fmt.Errorf("processamento unificado de médicos não implementado ainda")
+}
+
+func (h *WebSocketHandler) processUnifiedMunicipios(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	return fmt.Errorf("processamento unificado de municípios não implementado ainda")
+}
+
+func (h *WebSocketHandler) processUnifiedEstados(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	return fmt.Errorf("processamento unificado de estados não implementado ainda")
+}
+
+// processUnifiedCID10 processa dados CID10 usando dados unificados
+func (h *WebSocketHandler) processUnifiedCID10(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	cid10s, err := h.convertRowsToCID10(parsedData)
+	if err != nil {
+		return fmt.Errorf("erro ao converter dados para CID10: %v", err)
+	}
+
+	if len(cid10s) == 0 {
+		return fmt.Errorf("nenhum registro CID10 válido encontrado nos dados")
+	}
+
+	totalItems := len(cid10s)
+	totalBatches := (totalItems + batchSize - 1) / batchSize
+
+	log.Printf("Processando %d registros CID10 em %d batches para sessão %s", totalItems, totalBatches, sessionID)
+
+	for i := 0; i < totalBatches; i++ {
+		start := i * batchSize
+		end := start + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batchCID10 := cid10s[start:end]
+
+		jobID := uuid.New().String()
+		job := &services.Job{
+			ID:         jobID,
+			Type:       "cid10",
+			Status:     services.JobStatusPending,
+			TotalItems: len(batchCID10),
+			CreatedAt:  time.Now(),
+			SessionID:  sessionID,
+		}
+
+		batchDataBytes, err := json.Marshal(batchCID10)
+		if err != nil {
+			return fmt.Errorf("erro ao serializar batch: %v", err)
+		}
+
+		batchData := services.BatchData{
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
+			Data:         batchDataBytes,
+		}
+
+		data, _ := json.Marshal(batchData)
+		job.Data = data
+
+		err = h.redisService.EnqueueJob(job)
+		if err != nil {
+			return fmt.Errorf("erro ao enfileirar job: %v", err)
+		}
+
+		log.Printf("✓ Batch %d/%d enfileirado com %d registros CID10", i+1, totalBatches, len(batchCID10))
+	}
+
+	return nil
+}
+
+// convertRowsToCID10 converte dados tabulares para CID10
+func (h *WebSocketHandler) convertRowsToCID10(parsedData *parsers.ParsedData) ([]domain.Cid10, error) {
+	var cid10s []domain.Cid10
+	idCounter := 1
+
+	// Se for arquivo com apenas uma coluna, assumir que cada linha é: CODIGO - DESCRIÇÃO
+	if len(parsedData.Headers) == 1 {
+		log.Printf("Processando arquivo CID10 com formato CODIGO - DESCRIÇÃO")
+		
+		for _, row := range parsedData.Rows {
+			if len(row) == 0 || strings.TrimSpace(row[0]) == "" {
+				continue
+			}
+
+			linha := strings.TrimSpace(row[0])
+			
+			// Filtrar apenas linhas que começam com código válido (padrão: 1-3 letras + números)
+			// Exemplos: C93, A01, B15, Z12, etc.
+			if !h.isValidCIDCode(linha) {
+				continue
+			}
+
+			// Separar código da descrição pelo primeiro "-"
+			parts := strings.SplitN(linha, "-", 2)
+			if len(parts) < 2 {
+				continue
+			}
+
+			codigo := strings.TrimSpace(parts[0])
+			descricao := strings.TrimSpace(parts[1])
+
+			// Validar se código não está muito longo (códigos CID são curtos)
+			if len(codigo) > 10 {
+				continue
+			}
+
+			cid10 := domain.Cid10{
+				ID:        idCounter,
+				Codigo:    codigo,
+				Descricao: descricao,
+				Categoria: "",
+				Grupo:     "",
+			}
+
+			cid10s = append(cid10s, cid10)
+			idCounter++
+
+			// Log primeiros 5 para debug
+			if len(cid10s) <= 5 {
+				log.Printf("✓ CID10 parseado: '%s' -> '%s'", codigo, descricao[:h.min(50, len(descricao))])
+			}
+		}
+	} else {
+		// Para arquivos com múltiplas colunas, usar lógica anterior
+		return h.convertRowsToCID10Legacy(parsedData)
+	}
+
+	log.Printf("✓ Convertidos %d registros CID10 válidos dos dados", len(cid10s))
+	
+	return cid10s, nil
+}
+
+// isValidCIDCode verifica se uma linha começa com código CID válido
+func (h *WebSocketHandler) isValidCIDCode(linha string) bool {
+	if len(linha) < 3 {
+		return false
+	}
+	
+	trimmed := strings.TrimSpace(linha)
+	if len(trimmed) < 3 {
+		return false
+	}
+
+	// Primeiro caractere deve ser letra
+	if !((trimmed[0] >= 'A' && trimmed[0] <= 'Z') || (trimmed[0] >= 'a' && trimmed[0] <= 'z')) {
+		return false
+	}
+
+	// Procurar por números nos primeiros caracteres
+	hasNumber := false
+	for i := 1; i < h.min(6, len(trimmed)); i++ {
+		if trimmed[i] >= '0' && trimmed[i] <= '9' {
+			hasNumber = true
+			break
+		}
+		// Se encontrar "-", parar busca
+		if trimmed[i] == '-' {
+			break
+		}
+	}
+
+	return hasNumber
+}
+
+// min helper function
+func (h *WebSocketHandler) min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// convertRowsToCID10Legacy mantém a lógica anterior para arquivos com múltiplas colunas
+func (h *WebSocketHandler) convertRowsToCID10Legacy(parsedData *parsers.ParsedData) ([]domain.Cid10, error) {
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range parsedData.Headers {
+		cleanHeader := strings.ToLower(strings.TrimSpace(header))
+		headerMap[cleanHeader] = i
+	}
+
+	var cid10s []domain.Cid10
+	idCounter := 1
+
+	for _, row := range parsedData.Rows {
+		if len(row) == 0 {
+			continue
+		}
+
+		cid10 := domain.Cid10{}
+		cid10.ID = idCounter
+
+		// Código CID10
+		codeFields := []string{"cid-10", "cid10", "codigo", "code", "classification"}
+		for _, field := range codeFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				codigo := strings.TrimSpace(row[idx])
+				if len(codigo) > 10 {
+					continue
+				}
+				cid10.Codigo = codigo
+				break
+			}
+		}
+
+		// Descrição
+		descFields := []string{"descricao", "description", "desc", "name", "nome", "titulo"}
+		for _, field := range descFields {
+			if idx, exists := headerMap[field]; exists && idx < len(row) {
+				cid10.Descricao = strings.TrimSpace(row[idx])
+				break
+			}
+		}
+
+		// Só adicionar se tiver código válido
+		if cid10.Codigo != "" && len(cid10.Codigo) <= 10 {
+			cid10s = append(cid10s, cid10)
+			idCounter++
+		}
+	}
+
+	return cid10s, nil
+}
+
+func (h *WebSocketHandler) processFHIRData(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	return fmt.Errorf("processamento de dados FHIR não implementado ainda")
+}
+
+func (h *WebSocketHandler) processUploadedDataLegacy(sessionID, fileType, csvData string) error {
 	// Configuração de batch por tipo
 	batchSizes := map[string]int{
 		"estados":    getEnvAsInt("BATCH_SIZE_ESTADOS", 50),
