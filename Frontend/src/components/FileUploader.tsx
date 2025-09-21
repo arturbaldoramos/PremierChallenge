@@ -3,10 +3,9 @@ import { Upload, File, AlertCircle, CheckCircle2, Loader2, X } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useWebSocket, type UploadProgress } from '@/hooks/useWebSocket';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 export interface FileType {
   id: string;
@@ -206,21 +205,24 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         {/* Seleção do Tipo de Arquivo */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Tipo de Arquivo</label>
-          <Select value={selectedFileType} onValueChange={setSelectedFileType}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o tipo de arquivo" />
-            </SelectTrigger>
-            <SelectContent>
-              {FILE_TYPES.map((fileType) => (
-                <SelectItem key={fileType.id} value={fileType.id}>
-                  <div>
-                    <div className="font-medium">{fileType.label}</div>
-                    <div className="text-xs text-muted-foreground">{fileType.description}</div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap gap-2">
+            {FILE_TYPES.map((fileType) => (
+              <Button
+                key={fileType.id}
+                variant={selectedFileType === fileType.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedFileType(fileType.id)}
+                className="text-xs"
+              >
+                {fileType.label}
+              </Button>
+            ))}
+          </div>
+          {selectedFileTypeData && (
+            <p className="text-xs text-muted-foreground">
+              {selectedFileTypeData.description}
+            </p>
+          )}
         </div>
 
         {/* Seleção de Arquivo */}
