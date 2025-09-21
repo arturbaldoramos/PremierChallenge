@@ -14,7 +14,6 @@ export interface ApiErrorResponse {
   error?: string
 }
 
-// Classe de erro personalizada
 class ApiError extends Error {
   public status: number
   public error?: string
