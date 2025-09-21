@@ -1008,6 +1008,9 @@ func (h *WebSocketHandler) convertRowsToEstados(parsedData *parsers.ParsedData) 
 		headerMap[cleanHeader] = i
 	}
 
+	log.Printf("🔍 DEBUG Estados - Headers disponíveis: %v", parsedData.Headers)
+	log.Printf("🔍 DEBUG Estados - Header map: %v", headerMap)
+
 	var estados []domain.Estado
 
 	for rowIndex, row := range parsedData.Rows {
@@ -1017,11 +1020,20 @@ func (h *WebSocketHandler) convertRowsToEstados(parsedData *parsers.ParsedData) 
 
 		estado := domain.Estado{}
 
+		// Log da linha atual para debug
+		log.Printf("🔍 DEBUG Estados - Linha %d: %v", rowIndex+1, row)
+
 		// Código
 		codigoFields := []string{"codigo", "codigo_uf", "code", "state_code", "uf_code"}
 		for _, field := range codigoFields {
 			if idx, exists := headerMap[field]; exists && idx < len(row) {
-				estado.Codigo = strings.TrimSpace(row[idx])
+				codigoValue := strings.TrimSpace(row[idx])
+				// Garantir que o código tenha no máximo 2 caracteres
+				if len(codigoValue) > 2 {
+					codigoValue = codigoValue[:2]
+				}
+				estado.Codigo = codigoValue
+				log.Printf("🔍 DEBUG Estados - Linha %d campo '%s' (idx %d): '%s' -> codigo='%s'", rowIndex+1, field, idx, row[idx], estado.Codigo)
 				break
 			}
 		}
@@ -1030,7 +1042,13 @@ func (h *WebSocketHandler) convertRowsToEstados(parsedData *parsers.ParsedData) 
 		ufFields := []string{"unidade_federativa", "uf", "sigla", "state_abbr", "abbreviation"}
 		for _, field := range ufFields {
 			if idx, exists := headerMap[field]; exists && idx < len(row) {
-				estado.UnidadeFederativa = strings.TrimSpace(row[idx])
+				ufValue := strings.TrimSpace(row[idx])
+				// Garantir que a UF tenha no máximo 2 caracteres
+				if len(ufValue) > 2 {
+					ufValue = ufValue[:2]
+				}
+				estado.UnidadeFederativa = ufValue
+				log.Printf("🔍 DEBUG Estados - Linha %d campo '%s' (idx %d): '%s' -> uf='%s'", rowIndex+1, field, idx, row[idx], estado.UnidadeFederativa)
 				break
 			}
 		}
@@ -1040,6 +1058,7 @@ func (h *WebSocketHandler) convertRowsToEstados(parsedData *parsers.ParsedData) 
 		for _, field := range nomeFields {
 			if idx, exists := headerMap[field]; exists && idx < len(row) {
 				estado.Nome = strings.TrimSpace(row[idx])
+				log.Printf("🔍 DEBUG Estados - Linha %d campo '%s' (idx %d): '%s' -> nome='%s'", rowIndex+1, field, idx, row[idx], estado.Nome)
 				break
 			}
 		}
@@ -1049,6 +1068,7 @@ func (h *WebSocketHandler) convertRowsToEstados(parsedData *parsers.ParsedData) 
 		for _, field := range regiaoFields {
 			if idx, exists := headerMap[field]; exists && idx < len(row) {
 				estado.Regiao = strings.TrimSpace(row[idx])
+				log.Printf("🔍 DEBUG Estados - Linha %d campo '%s' (idx %d): '%s' -> regiao='%s'", rowIndex+1, field, idx, row[idx], estado.Regiao)
 				break
 			}
 		}
@@ -1071,14 +1091,33 @@ func (h *WebSocketHandler) convertRowsToEstados(parsedData *parsers.ParsedData) 
 			}
 		}
 
-		// Só adicionar se tiver pelo menos um identificador
-		if estado.Codigo != "" || estado.UnidadeFederativa != "" || estado.Nome != "" {
+		// Log do estado final parseado
+		log.Printf("✅ DEBUG Estados - Linha %d parseada: Codigo='%s', UF='%s', Nome='%s', Regiao='%s'",
+			rowIndex+1, estado.Codigo, estado.UnidadeFederativa, estado.Nome, estado.Regiao)
+
+		// Garantir que campos obrigatórios sejam preenchidos
+		// Se não tiver código, usar UF como código (padrão comum)
+		if estado.Codigo == "" && estado.UnidadeFederativa != "" {
+			estado.Codigo = estado.UnidadeFederativa
+			log.Printf("🔧 DEBUG Estados - Linha %d: usando UF como código: '%s'", rowIndex+1, estado.Codigo)
+		}
+
+		// Se ainda não tiver região, usar um padrão
+		if estado.Regiao == "" {
+			estado.Regiao = "Indefinida"
+		}
+
+		// Só adicionar se tiver pelo menos código e nome
+		if estado.Codigo != "" && estado.Nome != "" {
 			estados = append(estados, estado)
+			log.Printf("✅ DEBUG Estados - Linha %d ADICIONADA ao slice", rowIndex+1)
 		} else {
-			log.Printf("⚠ Linha %d ignorada - estado sem identificador válido", rowIndex+1)
+			log.Printf("⚠ Linha %d ignorada - estado sem código ou nome válido (codigo='%s', nome='%s')",
+				rowIndex+1, estado.Codigo, estado.Nome)
 		}
 	}
 
+	log.Printf("📊 DEBUG Estados - Total convertido: %d estados", len(estados))
 	return estados, nil
 }
 
