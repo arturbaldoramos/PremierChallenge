@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"example.com/m/v2/internal/config"
@@ -13,6 +14,16 @@ import (
 	"example.com/m/v2/internal/services"
 	"github.com/gorilla/mux"
 )
+
+// getEnvAsInt retrieves an environment variable as an integer, with a default fallback
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
 
 func main() {
 	log.Println("Starting Premiere Challenge Backend...")
@@ -71,20 +82,20 @@ func main() {
 	// Start background services
 	workerConfig := services.WorkerConfig{
 		MaxWorkers: map[string]int{
-			"estados":    2,
-			"municipios": 4,
-			"medicos":    3,
-			"hospitais":  2,
-			"pacientes":  3,
-			"cid10":      2,
+			"estados":    getEnvAsInt("MAX_WORKERS_ESTADOS", 2),
+			"municipios": getEnvAsInt("MAX_WORKERS_MUNICIPIOS", 4),
+			"medicos":    getEnvAsInt("MAX_WORKERS_MEDICOS", 3),
+			"hospitais":  getEnvAsInt("MAX_WORKERS_HOSPITAIS", 2),
+			"pacientes":  getEnvAsInt("MAX_WORKERS_PACIENTES", 3),
+			"cid10":      getEnvAsInt("MAX_WORKERS_CID10", 2),
 		},
 		BatchSize: map[string]int{
-			"estados":    50,
-			"municipios": 200,
-			"medicos":    300,
-			"hospitais":  150,
-			"pacientes":  250,
-			"cid10":      400,
+			"estados":    getEnvAsInt("BATCH_SIZE_ESTADOS", 50),
+			"municipios": getEnvAsInt("BATCH_SIZE_MUNICIPIOS", 200),
+			"medicos":    getEnvAsInt("BATCH_SIZE_MEDICOS", 300),
+			"hospitais":  getEnvAsInt("BATCH_SIZE_HOSPITAIS", 150),
+			"pacientes":  getEnvAsInt("BATCH_SIZE_PACIENTES", 250),
+			"cid10":      getEnvAsInt("BATCH_SIZE_CID10", 400),
 		},
 	}
 

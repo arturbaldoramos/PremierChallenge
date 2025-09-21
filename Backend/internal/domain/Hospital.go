@@ -12,6 +12,6 @@ type Hospital struct {
 	CEP            string         `json:"cep" gorm:"size:8;index"`
 	Especialidades datatypes.JSON `json:"especialidades" gorm:"type:jsonb"`
 	LeitosTotais   int            `json:"leitos_totais" gorm:"default:0"`
-	CodMunicipio   string         `json:"cod_municipio" gorm:"index;size:10"`
+	CodMunicipio   string         `json:"cod_municipio" gorm:"index;size:50"`
 	Bairro         string         `json:"bairro" gorm:"size:100"`
 }

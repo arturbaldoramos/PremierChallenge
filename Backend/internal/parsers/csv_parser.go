@@ -423,7 +423,10 @@ func (p *CSVParser) ParseMedicosStreaming(file *multipart.FileHeader, chunkSize 
 			medico.Especialidade = strings.TrimSpace(record[idx])
 		}
 		if idx, exists := headerMap["cidade"]; exists && idx < len(record) {
-			medico.CodMunicipio = strings.TrimSpace(record[idx])
+			codMunicipio := strings.TrimSpace(record[idx])
+			if codMunicipio != "" {
+				medico.CodMunicipio = codMunicipio
+			}
 		}
 
 		medicos = append(medicos, medico)

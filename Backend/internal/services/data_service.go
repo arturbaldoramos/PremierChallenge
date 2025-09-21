@@ -1,12 +1,24 @@
 package services
 
 import (
+	"os"
+	"strconv"
 	"example.com/m/v2/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"runtime"
 	"sync"
 )
+
+// getEnvAsInt retrieves an environment variable as an integer, with a default fallback
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
 
 type DataService struct {
 	db *gorm.DB
@@ -490,7 +502,7 @@ func (s *DataService) UpsertMedicosConcurrent(medicos []domain.Medico) (int, int
 		numWorkers = 6 // Limita para não sobrecarregar o banco
 	}
 
-	batchSize := 300
+	batchSize := getEnvAsInt("BATCH_SIZE_MEDICOS", 300)
 	batches := make([][]domain.Medico, 0)
 
 	// Dividir em batches

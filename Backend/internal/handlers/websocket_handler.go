@@ -5,8 +5,10 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +20,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+// getEnvAsInt retrieves an environment variable as an integer, with a default fallback
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
 
 type WebSocketHandler struct {
 	upgrader     websocket.Upgrader
@@ -43,9 +55,9 @@ type Message struct {
 }
 
 type UploadMessage struct {
-	FileType string          `json:"file_type"`
-	FileName string          `json:"file_name"`
-	Chunks   []ChunkMessage  `json:"chunks"`
+	FileType string         `json:"file_type"`
+	FileName string         `json:"file_name"`
+	Chunks   []ChunkMessage `json:"chunks"`
 }
 
 type ChunkMessage struct {
@@ -340,12 +352,12 @@ func min(a, b int) int {
 func (h *WebSocketHandler) processUploadedData(sessionID, fileType, csvData string) error {
 	// Configuração de batch por tipo
 	batchSizes := map[string]int{
-		"estados":    50,
-		"municipios": 200,
-		"medicos":    300,
-		"hospitais":  150,
-		"pacientes":  250,
-		"cid10":      400,
+		"estados":    getEnvAsInt("BATCH_SIZE_ESTADOS", 50),
+		"municipios": getEnvAsInt("BATCH_SIZE_MUNICIPIOS", 200),
+		"medicos":    getEnvAsInt("BATCH_SIZE_MEDICOS", 300),
+		"hospitais":  getEnvAsInt("BATCH_SIZE_HOSPITAIS", 150),
+		"pacientes":  getEnvAsInt("BATCH_SIZE_PACIENTES", 250),
+		"cid10":      getEnvAsInt("BATCH_SIZE_CID10", 400),
 	}
 
 	batchSize := batchSizes[fileType]
@@ -415,12 +427,12 @@ func (h *WebSocketHandler) processMunicipios(sessionID, csvData string, batchSiz
 		// Criar job para o batch
 		jobID := uuid.New().String()
 		job := &services.Job{
-			ID:           jobID,
-			Type:         "municipios",
-			Status:       services.JobStatusPending,
-			TotalItems:   len(batchMunicipios),
-			CreatedAt:    time.Now(),
-			SessionID:    sessionID,
+			ID:         jobID,
+			Type:       "municipios",
+			Status:     services.JobStatusPending,
+			TotalItems: len(batchMunicipios),
+			CreatedAt:  time.Now(),
+			SessionID:  sessionID,
 		}
 
 		// Serializar dados do batch
@@ -450,59 +462,148 @@ func (h *WebSocketHandler) processMunicipios(sessionID, csvData string, batchSiz
 }
 
 func (h *WebSocketHandler) processMedicos(sessionID, csvData string, batchSize int) error {
-	medicos, err := h.parseCSVMedicosFromString(csvData)
+	return h.processMedicosStreaming(sessionID, csvData, batchSize)
+}
+
+// processMedicosStreaming processa CSV em streaming, criando batches conforme lê os dados
+func (h *WebSocketHandler) processMedicosStreaming(sessionID, csvData string, batchSize int) error {
+	reader := csv.NewReader(strings.NewReader(csvData))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+	reader.TrimLeadingSpace = true
+
+	// Ler cabeçalho
+	headers, err := reader.Read()
 	if err != nil {
-		return fmt.Errorf("failed to parse CSV: %v", err)
+		return fmt.Errorf("failed to read CSV headers: %v", err)
 	}
 
-	if len(medicos) == 0 {
-		return fmt.Errorf("no valid doctors found in CSV")
+	// Criar mapa de índices dos cabeçalhos
+	headerMap := make(map[string]int)
+	for i, header := range headers {
+		headerMap[strings.ToLower(strings.TrimSpace(header))] = i
 	}
 
-	totalItems := len(medicos)
-	totalBatches := (totalItems + batchSize - 1) / batchSize
+	var currentBatch []domain.Medico
+	batchNumber := 1
+	totalProcessed := 0
 
-	log.Printf("Processing %d doctors in %d batches for session %s", totalItems, totalBatches, sessionID)
+	log.Printf("Starting streaming processing for session %s with batch size %d", sessionID, batchSize)
 
-	for i := 0; i < totalBatches; i++ {
-		start := i * batchSize
-		end := start + batchSize
-		if end > totalItems {
-			end = totalItems
+	// Processar linha por linha
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
 		}
-
-		batchMedicos := medicos[start:end]
-
-		jobID := uuid.New().String()
-		job := &services.Job{
-			ID:           jobID,
-			Type:         "medicos",
-			Status:       services.JobStatusPending,
-			TotalItems:   len(batchMedicos),
-			CreatedAt:    time.Now(),
-			SessionID:    sessionID,
-		}
-
-		batchDataBytes, err := json.Marshal(batchMedicos)
 		if err != nil {
-			return fmt.Errorf("failed to marshal batch data: %v", err)
+			log.Printf("Error reading CSV record: %v", err)
+			continue
 		}
 
-		batchData := services.BatchData{
-			BatchNumber:  i + 1,
-			TotalBatches: totalBatches,
-			Data:         batchDataBytes,
+		// Parse do médico
+		medico := domain.Medico{}
+
+		// UUID do médico (da coluna codigo)
+		if idx, exists := headerMap["codigo"]; exists && idx < len(record) {
+			uuidStr := strings.TrimSpace(record[idx])
+			medico.UUID, _ = uuid.Parse(uuidStr)
 		}
 
-		data, _ := json.Marshal(batchData)
-		job.Data = data
+		// Nome (múltiplas variações)
+		nomeColumns := []string{"nome_completo", "nome", "name", "medico", "doctor", "nome_medico", "doctor_name"}
+		for _, col := range nomeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				medico.Nome = strings.TrimSpace(record[idx])
+				break
+			}
+		}
 
-		err = h.redisService.EnqueueJob(job)
+		// Especialidade
+		especialidadeColumns := []string{"especialidade", "specialty", "especialization", "area", "speciality"}
+		for _, col := range especialidadeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				medico.Especialidade = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Código do município
+		municipioColumns := []string{"cidade", "cod_municipio", "codigo_municipio", "municipio_id", "city", "city_code", "municipality_code"}
+		for _, col := range municipioColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				codMunicipio := strings.TrimSpace(record[idx])
+				if codMunicipio != "" {
+					medico.CodMunicipio = codMunicipio
+					break
+				}
+			}
+		}
+
+		// Só adicionar se tiver pelo menos nome
+		if medico.Nome != "" {
+			currentBatch = append(currentBatch, medico)
+			totalProcessed++
+
+			// Se atingiu o tamanho do batch, processar
+			if len(currentBatch) >= batchSize {
+				err := h.submitMedicosBatch(sessionID, currentBatch, batchNumber)
+				if err != nil {
+					log.Printf("Error submitting batch %d: %v", batchNumber, err)
+				} else {
+					log.Printf("✓ Batch %d submitted with %d doctors", batchNumber, len(currentBatch))
+				}
+
+				// Reset batch
+				currentBatch = []domain.Medico{}
+				batchNumber++
+			}
+		}
+	}
+
+	// Processar último batch se houver registros restantes
+	if len(currentBatch) > 0 {
+		err := h.submitMedicosBatch(sessionID, currentBatch, batchNumber)
 		if err != nil {
-			return fmt.Errorf("failed to enqueue job: %v", err)
+			log.Printf("Error submitting final batch %d: %v", batchNumber, err)
+		} else {
+			log.Printf("✓ Final batch %d submitted with %d doctors", batchNumber, len(currentBatch))
 		}
+	}
 
-		log.Printf("Enqueued batch %d/%d with %d doctors", i+1, totalBatches, len(batchMedicos))
+	log.Printf("Streaming processing completed. Total doctors processed: %d in %d batches", totalProcessed, batchNumber)
+	return nil
+}
+
+// submitMedicosBatch submete um batch de médicos para a fila Redis
+func (h *WebSocketHandler) submitMedicosBatch(sessionID string, medicos []domain.Medico, batchNumber int) error {
+	jobID := uuid.New().String()
+	job := &services.Job{
+		ID:         jobID,
+		Type:       "medicos",
+		Status:     services.JobStatusPending,
+		TotalItems: len(medicos),
+		CreatedAt:  time.Now(),
+		SessionID:  sessionID,
+	}
+
+	batchDataBytes, err := json.Marshal(medicos)
+	if err != nil {
+		return fmt.Errorf("failed to marshal batch data: %v", err)
+	}
+
+	batchData := services.BatchData{
+		BatchNumber:  batchNumber,
+		TotalBatches: -1, // Não sabemos o total antecipadamente no streaming
+		Data:         batchDataBytes,
+	}
+
+	data, _ := json.Marshal(batchData)
+	job.Data = data
+
+	err = h.redisService.EnqueueJob(job)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue job: %v", err)
 	}
 
 	return nil
@@ -681,12 +782,12 @@ func (h *WebSocketHandler) processEstados(sessionID, csvData string, batchSize i
 
 		jobID := uuid.New().String()
 		job := &services.Job{
-			ID:           jobID,
-			Type:         "estados",
-			Status:       services.JobStatusPending,
-			TotalItems:   len(batchEstados),
-			CreatedAt:    time.Now(),
-			SessionID:    sessionID,
+			ID:         jobID,
+			Type:       "estados",
+			Status:     services.JobStatusPending,
+			TotalItems: len(batchEstados),
+			CreatedAt:  time.Now(),
+			SessionID:  sessionID,
 		}
 
 		batchDataBytes, err := json.Marshal(batchEstados)
