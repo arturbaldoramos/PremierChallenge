@@ -104,7 +104,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       case 'xml':
         return <FileCode className="w-4 h-4 text-blue-500" />;
       case 'txt':
-        return <FileText className="w-4 h-4 text-gray-500" />;
+        return <FileText className="w-4 h-4 text-muted-foreground" />;
       case 'pdf':
         return <FileImage className="w-4 h-4 text-red-500" />;
       case 'zip':
@@ -112,7 +112,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       case '7z':
         return <FileArchive className="w-4 h-4 text-purple-500" />;
       default:
-        return <File className="w-4 h-4 text-gray-500" />;
+        return <File className="w-4 h-4 text-muted-foreground" />;
     }
   }, []);
 
@@ -308,7 +308,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
               isDragOver
                 ? 'border-primary bg-primary/5'
-                : 'border-gray-300 hover:border-gray-400'
+                : 'border-border hover:border-border/80'
             }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -322,11 +322,11 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
               className="hidden"
             />
             <label htmlFor="file-input" className="cursor-pointer">
-              <Upload className={`w-8 h-8 mx-auto mb-2 ${isDragOver ? 'text-primary' : 'text-gray-400'}`} />
-              <p className={`text-sm ${isDragOver ? 'text-primary' : 'text-gray-600'}`}>
+              <Upload className={`w-8 h-8 mx-auto mb-2 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
+              <p className={`text-sm ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`}>
                 {isDragOver ? 'Solte o arquivo aqui' : 'Clique para selecionar ou arraste um arquivo'}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Tipos aceitos: CSV, XLSX, JSON, XML, TXT, PDF e outros
               </p>
             </label>
@@ -335,12 +335,12 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
         {/* Arquivo Selecionado */}
         {selectedFile && (
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div className="flex items-center gap-3">
               {getFileIcon(selectedFile.name)}
               <div>
                 <p className="text-sm font-medium">{selectedFile.name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {formatFileSize(selectedFile.size)} • {getFileTypeDescription(selectedFile.name)}
                 </p>
               </div>
@@ -400,7 +400,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
             <h4 className="text-sm font-medium">Status das Filas</h4>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(queueStatus).map(([queue, count]) => (
-                <div key={queue} className="flex justify-between p-2 bg-gray-50 rounded">
+                <div key={queue} className="flex justify-between p-2 bg-muted/50 rounded">
                   <span className="text-sm capitalize">{queue}</span>
                   <Badge variant="outline">{count} jobs</Badge>
                 </div>
@@ -423,13 +423,13 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
                     </Badge>
                   </div>
                   <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-gray-600">
+                    <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{job.processed_items} de {job.total_items} processados</span>
                       <span>{job.progress}%</span>
                     </div>
                     <Progress value={job.progress} className="h-2" />
                     {job.message && (
-                      <p className="text-xs text-gray-500">{job.message}</p>
+                      <p className="text-xs text-muted-foreground">{job.message}</p>
                     )}
                   </div>
                 </div>
@@ -448,7 +448,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
         {/* Informações da Sessão */}
         {sessionId && (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-muted-foreground">
             Session ID: {sessionId}
           </div>
         )}
