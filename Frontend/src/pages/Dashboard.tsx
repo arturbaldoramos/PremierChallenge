@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
 import { useState } from "react"
+import { useStats } from "@/hooks/useStats"
 
 // Dados mockados para demonstração
 const estados = [
@@ -114,6 +115,8 @@ export default function Dashboard() {
     hospital: "todos",
     doenca: "todos"
   })
+
+  const { data: statsData, isLoading: isLoadingStats, error: statsError } = useStats()
 
   const handleFiltroChange = (tipo: string, valor: string) => {
     setFiltros(prev => ({ ...prev, [tipo]: valor }))
@@ -231,15 +234,32 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Pacientes Ativos
+              Total de Médicos
             </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,234</div>
-            <p className="text-xs text-muted-foreground">
-              +8.5% em relação ao mês anterior
-            </p>
+            {isLoadingStats ? (
+              <div className="text-2xl font-bold">Carregando...</div>
+            ) : statsError ? (
+              <>
+                <div className="text-2xl font-bold">
+                  {statsData?.total_medicos.toLocaleString('pt-BR') || '0'}
+                </div>
+                <p className="text-xs text-orange-500">
+                  {statsError}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {statsData?.total_medicos.toLocaleString('pt-BR') || '0'}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Médicos cadastrados no sistema
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         
@@ -249,10 +269,27 @@ export default function Dashboard() {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">127</div>
-            <p className="text-xs text-muted-foreground">
-              +3 novos hospitais este mês
-            </p>
+            {isLoadingStats ? (
+              <div className="text-2xl font-bold">Carregando...</div>
+            ) : statsError ? (
+              <>
+                <div className="text-2xl font-bold">
+                  {statsData?.total_hospitais.toLocaleString('pt-BR') || '0'}
+                </div>
+                <p className="text-xs text-orange-500">
+                  {statsError}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {statsData?.total_hospitais.toLocaleString('pt-BR') || '0'}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Hospitais cadastrados no sistema
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         
