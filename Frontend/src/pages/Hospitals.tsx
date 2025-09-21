@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,10 +18,8 @@ import {
   Search, 
   Filter,
   Download,
-  Upload,
   FileText,
-  FolderOpen,
-  X
+  FolderOpen
 } from "lucide-react"
 import {
   Command,
@@ -61,9 +59,6 @@ export default function Hospitals() {
   const [hospitals, setHospitals] = useState<Hospital[]>([])
   const [filteredHospitals, setFilteredHospitals] = useState<Hospital[]>([])
   const [loading] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [isDragOver, setIsDragOver] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
     cidade: '',
     bairro: '',
@@ -71,14 +66,11 @@ export default function Hospitals() {
     search: ''
   })
   const [openSpecialty, setOpenSpecialty] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(6) // 6 hospitais por página
 
-  // Configuração da API - substitua pela sua URL
-  const API_URL = 'https://sua-api.com/upload'
 
   // Dados mockados para teste
   const mockHospitals: Hospital[] = [
@@ -205,86 +197,6 @@ export default function Hospitals() {
     setSpecialties(uniqueSpecialties)
   }
 
-  // Função para processar arquivo (usada tanto para input quanto drag&drop)
-  const processFile = async (file: File) => {
-    if (!file) return
-
-    setUploading(true)
-    setUploadedFile(file)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      setHospitals(data)
-      setFilteredHospitals(data)
-      
-      // Extrair especialidades únicas dos dados
-      const uniqueSpecialties = [...new Set(data.flatMap((h: Hospital) => h.especialidades))] as string[]
-      setSpecialties(uniqueSpecialties)
-      
-    } catch (error) {
-      console.error('Erro ao fazer upload do arquivo:', error)
-      alert('Erro ao processar arquivo. Verifique a configuração da API.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  // Função para lidar com upload de arquivo via input
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    await processFile(file)
-    
-    // Limpar input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  // Funções para drag and drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    
-    const droppedFiles = e.dataTransfer.files
-    if (droppedFiles.length > 0) {
-      await processFile(droppedFiles[0]) // Pega apenas o primeiro arquivo
-    }
-  }
-
-  // Função para remover arquivo
-  const removeFile = () => {
-    setUploadedFile(null)
-    setHospitals([])
-    setFilteredHospitals([])
-    setSpecialties([])
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
 
   // Aplicar filtros - apenas formatação de texto (lógica de filtro será feita pelo backend)
   useEffect(() => {
@@ -350,78 +262,6 @@ export default function Hospitals() {
         </div>
       </div>
 
-      {/* Área de Upload - só aparece quando não há dados carregados */}
-      {hospitals.length === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Upload de Dados dos Hospitais
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!uploadedFile ? (
-              <div 
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isDragOver 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-muted-foreground/25 hover:border-muted-foreground/50'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
-                <h3 className="text-lg font-medium mb-2">
-                  {isDragOver ? 'Solte o arquivo aqui' : 'Faça upload do arquivo de hospitais'}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {isDragOver 
-                    ? 'Arraste e solte o arquivo aqui'
-                    : 'Arraste um arquivo aqui ou selecione com os dados dos hospitais (CSV, Excel, etc.)'
-                  }
-                </p>
-                <div className="flex items-center justify-center gap-4">
-                  <Button onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Selecionar Arquivo
-                  </Button>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="*/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
-                <div className="flex items-center space-x-3">
-                  <FileText className="h-8 w-8 text-primary" />
-                  <div>
-                    <p className="font-medium">{uploadedFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(uploadedFile.size / 1024).toFixed(2)} KB
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {uploading && (
-                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      <span>Processando...</span>
-                    </div>
-                  )}
-                  <Button variant="outline" size="sm" onClick={removeFile} disabled={uploading}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
 
       {/* Botão para página de upload - só aparece quando há dados carregados */}
@@ -432,9 +272,9 @@ export default function Hospitals() {
               <p className="text-muted-foreground mb-4">
                 Dados carregados com sucesso! ({hospitals.length} hospitais)
               </p>
-              <Button variant="outline" size="sm">
-                <Upload className="mr-2 h-4 w-4" />
-                Ir para Upload de Arquivos
+              <Button variant="outline" size="sm" onClick={() => navigate('/file-manager')}>
+                <FolderOpen className="mr-2 h-4 w-4" />
+                Ir para Gerenciador de Arquivos
               </Button>
             </div>
           </CardContent>
@@ -673,7 +513,7 @@ export default function Hospitals() {
               <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Nenhum hospital carregado</h3>
               <p className="text-muted-foreground">
-                Faça upload de um arquivo com os dados dos hospitais para começar.
+                Nenhum hospital encontrado. Use o Gerenciador de Arquivos para fazer upload dos dados.
               </p>
             </div>
           ) : filteredHospitals.length === 0 ? (
