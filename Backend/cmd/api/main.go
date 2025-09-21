@@ -78,6 +78,7 @@ func main() {
 	// Initialize handlers
 	uploadHandler := handlers.NewUploadHandler(db)
 	wsHandler := handlers.NewWebSocketHandler(redisService, dataService)
+	dashboardHandler := handlers.NewDashboardHandler(db)
 
 	// Start background services
 	workerConfig := services.WorkerConfig{
@@ -131,6 +132,11 @@ func main() {
 	api.HandleFunc("/upload/pacientes", uploadHandler.UploadPacientes).Methods("POST")
 	api.HandleFunc("/upload/medicos", uploadHandler.UploadMedicos).Methods("POST")
 	api.HandleFunc("/upload/cid10", uploadHandler.UploadCID10).Methods("POST")
+
+	// Dashboard routes
+	api.HandleFunc("/dashboard/stats", dashboardHandler.GetDashboardStats).Methods("GET")
+	api.HandleFunc("/dashboard/hospitais", dashboardHandler.GetHospitaisFiltrados).Methods("GET")
+	api.HandleFunc("/dashboard/hospital", dashboardHandler.GetHospitalDetalhes).Methods("GET")
 
 	port := ":8080"
 	log.Printf("Server starting on port %s", port)
