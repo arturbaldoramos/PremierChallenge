@@ -31,14 +31,8 @@ func main() {
 	// Initialize database connection
 	db := config.InitDatabase()
 
-	// Reset database (temporary for fixing migration issues)
-	err := database.ResetDatabase(db)
-	if err != nil {
-		log.Fatalf("Failed to reset database: %v", err)
-	}
-
 	// Run automatic migrations
-	err = database.RunMigrations(db)
+	err := database.RunMigrations(db)
 	if err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
