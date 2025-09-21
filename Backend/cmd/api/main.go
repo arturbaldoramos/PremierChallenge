@@ -78,6 +78,7 @@ func main() {
 	// Initialize handlers
 	uploadHandler := handlers.NewUploadHandler(db)
 	wsHandler := handlers.NewWebSocketHandler(redisService, dataService)
+	statsHandler := handlers.NewStatsHandler(db)
 
 	// Start background services
 	workerConfig := services.WorkerConfig{
@@ -131,6 +132,17 @@ func main() {
 	api.HandleFunc("/upload/pacientes", uploadHandler.UploadPacientes).Methods("POST")
 	api.HandleFunc("/upload/medicos", uploadHandler.UploadMedicos).Methods("POST")
 	api.HandleFunc("/upload/cid10", uploadHandler.UploadCID10).Methods("POST")
+
+	// Statistics and filtering routes
+	stats := api.PathPrefix("/stats").Subrouter()
+	stats.HandleFunc("/totals", statsHandler.GetTotalStats).Methods("GET")
+	stats.HandleFunc("/hospitais-por-estado", statsHandler.GetHospitalsByState).Methods("GET")
+	stats.HandleFunc("/medicos-por-estado", statsHandler.GetMedicosByState).Methods("GET")
+	stats.HandleFunc("/hospitais-por-especialidade", statsHandler.GetHospitalsBySpecialty).Methods("GET")
+	stats.HandleFunc("/hospitais-por-municipio", statsHandler.GetHospitalsByMunicipio).Methods("GET")
+	stats.HandleFunc("/medicos-distribuicao", statsHandler.GetMedicosDistribution).Methods("GET")
+	stats.HandleFunc("/especialidades", statsHandler.GetEspecialidades).Methods("GET")
+	stats.HandleFunc("/assign-medicos-hospitais", statsHandler.AssignMedicosToHospitals).Methods("POST")
 
 	port := ":8080"
 	log.Printf("Server starting on port %s", port)
