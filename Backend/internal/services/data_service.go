@@ -1,6 +1,7 @@
 package services
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -791,6 +792,9 @@ func (s *DataService) processCID10Bulk(batch []domain.Cid10) (int, int, error) {
 
 	var existingCount int64
 	s.db.Model(&domain.Cid10{}).Where("codigo IN ?", existingCodes).Count(&existingCount)
+	
+	// Log para debug
+	log.Printf("🔍 DEBUG CID10: Batch de %d registros, %d já existem no banco", len(batch), existingCount)
 
 	// Construir query de bulk insert
 	placeholders := make([]string, len(batch))
@@ -802,7 +806,7 @@ func (s *DataService) processCID10Bulk(batch []domain.Cid10) (int, int, error) {
 	}
 
 	query := `
-		INSERT INTO cid10s (id, codigo, descricao, categoria, grupo)
+		INSERT INTO cid10 (id, codigo, descricao, categoria, grupo)
 		VALUES ` + strings.Join(placeholders, ", ") + `
 		ON CONFLICT (codigo) DO UPDATE SET
 			descricao = EXCLUDED.descricao,
