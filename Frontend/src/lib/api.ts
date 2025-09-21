@@ -200,7 +200,7 @@ class StatsApiClient {
       // Log detalhado do erro de rede
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new ApiError(
-          `Erro de rede: ${error.message}. Verifique se o backend está rodando em http://localhost:8080`,
+          `Erro de rede: ${error.message}. Verifique se o backend está rodando`,
           0
         )
       }

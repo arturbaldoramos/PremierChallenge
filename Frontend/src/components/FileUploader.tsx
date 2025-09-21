@@ -59,8 +59,22 @@ interface FileUploaderProps {
   onError?: (error: string) => void;
 }
 
+// Função para detectar a URL correta do WebSocket
+const getWebSocketUrl = (): string => {
+  // Se está rodando em desenvolvimento (npm run dev)
+  if (window.location.hostname === 'localhost' && window.location.port === '5173') {
+    return 'ws://localhost:8080/ws';
+  }
+
+  // Se está rodando via Docker ou produção, usar proxy do Nginx
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const hostname = window.location.hostname;
+  const port = window.location.port ? `:${window.location.port}` : '';
+  return `${protocol}//${hostname}${port}/ws`;
+};
+
 export const FileUploader: React.FC<FileUploaderProps> = ({
-  websocketUrl = 'ws://localhost:8080/ws',
+  websocketUrl = getWebSocketUrl(),
   onUploadComplete,
   onError
 }) => {

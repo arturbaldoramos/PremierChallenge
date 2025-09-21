@@ -64,7 +64,20 @@ func main() {
 	}).Methods("GET")
 
 	// Initialize services
-	redisService := services.NewRedisService("localhost:6379", "", 0)
+	redisHost := os.Getenv("REDIS_HOST")
+	if redisHost == "" {
+		redisHost = "localhost"
+	}
+	redisPort := os.Getenv("REDIS_PORT")
+	if redisPort == "" {
+		redisPort = "6379"
+	}
+	redisAddr := redisHost + ":" + redisPort
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	redisDB := getEnvAsInt("REDIS_DB", 0)
+
+	log.Printf("Connecting to Redis at: %s", redisAddr)
+	redisService := services.NewRedisService(redisAddr, redisPassword, redisDB)
 	dataService := services.NewDataService(db)
 	workerService := services.NewWorkerService(redisService, dataService)
 	monitorService := services.NewMonitorService(redisService)
