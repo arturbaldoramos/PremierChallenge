@@ -908,10 +908,178 @@ func (h *WebSocketHandler) parseCSVEstadosFromString(csvData string) ([]domain.E
 	return estados, nil
 }
 
-// Placeholder implementations for other types
+// processHospitais processa dados de hospitais
 func (h *WebSocketHandler) processHospitais(sessionID, csvData string, batchSize int) error {
-	// TODO: Implementar quando necessário
-	return fmt.Errorf("hospital processing not implemented yet")
+	hospitais, err := h.parseCSVHospitaisFromString(csvData)
+	if err != nil {
+		return fmt.Errorf("failed to parse CSV: %v", err)
+	}
+
+	if len(hospitais) == 0 {
+		return fmt.Errorf("no valid hospitals found in CSV")
+	}
+
+	totalItems := len(hospitais)
+	totalBatches := (totalItems + batchSize - 1) / batchSize
+
+	log.Printf("Processing %d hospitals in %d batches for session %s", totalItems, totalBatches, sessionID)
+
+	for i := 0; i < totalBatches; i++ {
+		start := i * batchSize
+		end := start + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batchHospitais := hospitais[start:end]
+
+		jobID := uuid.New().String()
+		job := &services.Job{
+			ID:         jobID,
+			Type:       "hospitais",
+			Status:     services.JobStatusPending,
+			TotalItems: len(batchHospitais),
+			CreatedAt:  time.Now(),
+			SessionID:  sessionID,
+		}
+
+		batchDataBytes, err := json.Marshal(batchHospitais)
+		if err != nil {
+			return fmt.Errorf("failed to marshal batch data: %v", err)
+		}
+
+		batchData := services.BatchData{
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
+			Data:         batchDataBytes,
+		}
+
+		data, _ := json.Marshal(batchData)
+		job.Data = data
+
+		err = h.redisService.EnqueueJob(job)
+		if err != nil {
+			return fmt.Errorf("failed to enqueue job: %v", err)
+		}
+
+		log.Printf("Enqueued batch %d/%d with %d hospitals", i+1, totalBatches, len(batchHospitais))
+	}
+
+	return nil
+}
+
+// parseCSVHospitaisFromString parses CSV data from string
+func (h *WebSocketHandler) parseCSVHospitaisFromString(csvData string) ([]domain.Hospital, error) {
+	reader := csv.NewReader(strings.NewReader(csvData))
+	reader.Comma = ','
+	reader.LazyQuotes = true
+
+	headers, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(headers) == 0 {
+		return nil, fmt.Errorf("empty CSV data")
+	}
+
+	log.Printf("CSV headers para hospitais: %v", headers[0])
+
+	headerMap := make(map[string]int)
+	for i, header := range headers[0] {
+		cleanHeader := strings.ToLower(strings.TrimSpace(header))
+		headerMap[cleanHeader] = i
+	}
+
+	var hospitais []domain.Hospital
+
+	for i := 1; i < len(headers); i++ {
+		record := headers[i]
+		hospital := domain.Hospital{}
+
+		// UUID do hospital (da coluna codigo)
+		if idx, exists := headerMap["codigo"]; exists && idx < len(record) {
+			uuidStr := strings.TrimSpace(record[idx])
+			if uuidStr != "" {
+				hospital.UUID, _ = uuid.Parse(uuidStr)
+			} else {
+				hospital.UUID = uuid.New()
+			}
+		} else {
+			hospital.UUID = uuid.New()
+		}
+
+		// Nome do hospital
+		nomeColumns := []string{"nome", "hospital_nome", "hospital", "name", "hospital_name"}
+		for _, col := range nomeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				hospital.Nome = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// CEP
+		cepColumns := []string{"cep", "zipcode", "postal_code"}
+		for _, col := range cepColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				hospital.CEP = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Especialidades (mantém como string com separador ;)
+		especialidadeColumns := []string{"especialidades", "specialties", "services", "servicos"}
+		for _, col := range especialidadeColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				hospital.Especialidades = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Leitos totais
+		leitosColumns := []string{"leitos_totais", "leitos", "beds", "total_beds"}
+		for _, col := range leitosColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				if leitos, err := strconv.Atoi(strings.TrimSpace(record[idx])); err == nil {
+					hospital.LeitosTotais = leitos
+				}
+				break
+			}
+		}
+
+		// Código do município/cidade
+		municipioColumns := []string{"cidade", "cod_municipio", "codigo_municipio", "municipio_id", "city", "city_code", "municipality_code"}
+		for _, col := range municipioColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				hospital.CodMunicipio = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Bairro
+		bairroColumns := []string{"bairro", "district", "neighborhood"}
+		for _, col := range bairroColumns {
+			if idx, exists := headerMap[col]; exists && idx < len(record) {
+				hospital.Bairro = strings.TrimSpace(record[idx])
+				break
+			}
+		}
+
+		// Log detalhado do parsing
+		log.Printf("Registro %d - Nome: '%s', CEP: '%s', Especialidades: '%s', Leitos: %d", 
+			i, hospital.Nome, hospital.CEP, hospital.Especialidades, hospital.LeitosTotais)
+
+		// Só adicionar se tiver pelo menos nome
+		if hospital.Nome != "" {
+			hospitais = append(hospitais, hospital)
+			log.Printf("✓ Hospital %d adicionado: %s", i, hospital.Nome)
+		} else {
+			log.Printf("✗ Hospital %d rejeitado - nome vazio", i)
+		}
+	}
+
+	log.Printf("Total de hospitais parseados: %d", len(hospitais))
+	return hospitais, nil
 }
 
 func (h *WebSocketHandler) processPacientes(sessionID, csvData string, batchSize int) error {
