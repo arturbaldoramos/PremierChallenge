@@ -1,13 +1,11 @@
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
-  Upload,
   FileText,
   FolderOpen,
-  Plus,
   Trash2,
   Download,
   Eye,
@@ -49,11 +47,8 @@ const fileCategories = [
 
 export default function FileManager() {
   const [files, setFiles] = useState<FileItem[]>([])
-  const [selectedCategory, setSelectedCategory] = useState('Hospitais')
-  const [isDragOver, setIsDragOver] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const getFileIcon = (fileType: FileTypeInfo) => {
     switch (fileType.type) {
@@ -65,113 +60,6 @@ export default function FileManager() {
     }
   };
 
-  const processFiles = (fileList: FileList) => {
-    if (!fileList || fileList.length === 0) return
-
-     // Não há limite de tamanho - arquivos são enviados diretamente para o backend
-     const validFiles = Array.from(fileList);
-
-    const newFiles: FileItem[] = validFiles.map((file, index) => ({
-      id: `file-${Date.now()}-${index}`,
-      name: file.name,
-      size: file.size,
-      type: file.type || 'unknown',
-      category: selectedCategory,
-      uploadDate: new Date(),
-      status: 'pending' as const,
-      progress: 0,
-      fileType: FileDetector.detectFileType(file) || undefined
-    }))
-
-    setFiles(prev => [...prev, ...newFiles])
-
-    // Processar arquivos automaticamente
-    validFiles.forEach((file, index) => {
-      const fileId = `file-${Date.now()}-${index}`;
-      processFileSimple(file, fileId);
-    });
-  }
-
-
-  // Função para processar arquivo
-  const processFileSimple = async (file: File, fileId: string) => {
-    const fileIndex = files.findIndex(f => f.id === fileId);
-    
-    // Atualiza status para processando
-    setFiles(prev => prev.map((f, i) => 
-      i === fileIndex ? { ...f, status: 'processing', progress: 0 } : f
-    ));
-
-    try {
-      // Simula progresso de upload
-      const progressInterval = setInterval(() => {
-        setFiles(prev => prev.map((f, i) => 
-          i === fileIndex ? { 
-            ...f, 
-            progress: Math.min(f.progress + 10, 90)
-          } : f
-        ));
-      }, 200);
-
-      // Detecta tipo de arquivo
-      const fileType = FileDetector.detectFileType(file);
-      
-      // Simula envio para backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      clearInterval(progressInterval);
-
-      // Atualiza com resultado
-      setFiles(prev => prev.map((f, i) => 
-        i === fileIndex ? { 
-          ...f, 
-          status: 'processed',
-          progress: 100,
-          fileType: fileType || { type: 'unknown', extension: '', mimeType: '', description: 'Unknown' },
-          error: undefined
-        } : f
-      ));
-
-    } catch (error) {
-      setFiles(prev => prev.map((f, i) => 
-        i === fileIndex ? { 
-          ...f, 
-          status: 'error',
-          progress: 0,
-          error: error instanceof Error ? error.message : 'Erro desconhecido'
-        } : f
-      ));
-    }
-  };
-
-  // Função para lidar com upload de arquivo via input
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    processFiles(event.target.files!)
-    
-    // Limpar input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  // Funções para drag and drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    
-    const droppedFiles = e.dataTransfer.files
-    processFiles(droppedFiles)
-  }
 
   // Função para remover arquivo
   const removeFile = (fileId: string) => {
@@ -323,77 +211,6 @@ export default function FileManager() {
         onError={handleUploadError}
       />
 
-      {/* Área de Upload Tradicional (mantida para outros tipos de arquivo) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Upload Tradicional (Outros Arquivos)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Seleção de Categoria */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Categoria do Arquivo</label>
-              <div className="flex flex-wrap gap-2">
-                {fileCategories.map((category) => (
-                  <Button
-                    key={category}
-                    variant={selectedCategory === category ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedCategory(category)}
-                  >
-                    {category}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Área de Upload com Drag & Drop */}
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                isDragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted-foreground/25 hover:border-muted-foreground/50'
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <Upload className={`h-12 w-12 mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
-              <h3 className="text-lg font-medium mb-2">
-                {isDragOver ? 'Solte os arquivos aqui' : 'Upload de arquivos não-CSV'}
-              </h3>
-              <p className="text-muted-foreground mb-2">
-                {isDragOver
-                  ? 'Arraste e solte os arquivos na categoria selecionada'
-                  : `Para arquivos XML, JSON, PDF, TXT na categoria: ${selectedCategory}`
-                }
-              </p>
-               <p className="text-xs text-muted-foreground mb-4">
-                 Tipos suportados: XML, JSON, PDF, TXT •
-                 Para arquivos CSV use o upload WebSocket acima
-               </p>
-              <div className="flex items-center justify-center gap-4">
-                <Button onClick={() => fileInputRef.current?.click()}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Selecionar Arquivos
-                </Button>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xml,.json,.pdf,.txt"
-                multiple
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Lista de Arquivos por Categoria */}
       {files.length > 0 && (
         <div className="space-y-4">
@@ -526,12 +343,8 @@ export default function FileManager() {
               <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Nenhum arquivo carregado</h3>
               <p className="text-muted-foreground mb-4">
-                Faça upload de arquivos para começar a gerenciar seus dados.
+                Use o componente de upload acima para enviar arquivos CSV
               </p>
-              <Button onClick={() => fileInputRef.current?.click()}>
-                <Plus className="mr-2 h-4 w-4" />
-                Fazer Primeiro Upload
-              </Button>
             </div>
           </CardContent>
         </Card>

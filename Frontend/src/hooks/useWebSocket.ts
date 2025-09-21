@@ -26,6 +26,8 @@ export interface UseWebSocketOptions {
   autoConnect?: boolean;
   reconnectAttempts?: number;
   reconnectInterval?: number;
+  autoRefreshQueue?: boolean;
+  queueRefreshInterval?: number;
 }
 
 export interface UseWebSocketReturn {
@@ -48,7 +50,9 @@ export const useWebSocket = ({
   url,
   autoConnect = false,
   reconnectAttempts = 3,
-  reconnectInterval = 5000
+  reconnectInterval = 5000,
+  autoRefreshQueue = true,
+  queueRefreshInterval = 2000
 }: UseWebSocketOptions): UseWebSocketReturn => {
   console.log('useWebSocket inicializado com:', { url, autoConnect, reconnectAttempts, reconnectInterval });
 
@@ -63,6 +67,29 @@ export const useWebSocket = ({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const queueRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const startQueueRefresh = useCallback(() => {
+    if (queueRefreshIntervalRef.current) {
+      clearInterval(queueRefreshIntervalRef.current);
+    }
+    
+    queueRefreshIntervalRef.current = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const message: WebSocketMessage = {
+          type: 'get_queue_status'
+        };
+        wsRef.current.send(JSON.stringify(message));
+      }
+    }, queueRefreshInterval);
+  }, [queueRefreshInterval]);
+
+  const stopQueueRefresh = useCallback(() => {
+    if (queueRefreshIntervalRef.current) {
+      clearInterval(queueRefreshIntervalRef.current);
+      queueRefreshIntervalRef.current = null;
+    }
+  }, []);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -89,6 +116,11 @@ export const useWebSocket = ({
         };
         console.log('Enviando mensagem de início:', startMessage);
         wsRef.current?.send(JSON.stringify(startMessage));
+
+        // Iniciar atualização automática da fila
+        if (autoRefreshQueue) {
+          startQueueRefresh();
+        }
       };
 
       wsRef.current.onmessage = (event) => {
@@ -135,6 +167,8 @@ export const useWebSocket = ({
       reconnectTimeoutRef.current = null;
     }
 
+    stopQueueRefresh();
+
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -144,7 +178,7 @@ export const useWebSocket = ({
     setIsConnecting(false);
     setSessionId(null);
     reconnectAttemptsRef.current = 0;
-  }, []);
+  }, [stopQueueRefresh]);
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -303,7 +337,7 @@ export const useWebSocket = ({
     return () => {
       disconnect();
     };
-  }, [autoConnect, connect, disconnect]);
+  }, [autoConnect, connect, disconnect, autoRefreshQueue]);
 
   return {
     isConnected,
