@@ -14,30 +14,33 @@ export function useTotalStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchTotalStats = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await fetch(`${API_BASE_URL}/stats/totals`);
-        
-        if (!response.ok) {
-          throw new Error(`Erro na API: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        setData(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
-        console.error('Erro ao buscar dados:', err);
-      } finally {
-        setLoading(false);
+  const fetchTotalStats = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Buscando dados de /stats/totals...');
+      const response = await fetch(`${API_BASE_URL}/stats/totals`);
+      
+      if (!response.ok) {
+        throw new Error(`Erro na API: ${response.status} - ${response.statusText}`);
       }
-    };
+      
+      const result = await response.json();
+      console.log('Dados recebidos:', result);
+      setData(result);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      setError(errorMessage);
+      console.error('Erro ao buscar dados:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchTotalStats();
   }, []);
 
-  return { data, loading, error };
+  return { data, loading, error, refetch: fetchTotalStats };
 }

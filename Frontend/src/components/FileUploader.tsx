@@ -86,7 +86,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     error: wsError
   } = useWebSocket({
     url: websocketUrl,
-    autoConnect: true
+    autoConnect: true,
+    autoRefreshQueue: true,
+    queueRefreshInterval: 2000
   });
 
   // Função para detectar tipo de arquivo e obter ícone
@@ -238,7 +240,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const selectedFileTypeData = FILE_TYPES.find(ft => ft.id === selectedFileType);
 
   return (
-    <Card className="w-full max-w-2xl">
+    <Card className="w-full">
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle className="flex items-center gap-2">
@@ -386,23 +388,26 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           )}
         </Button>
 
-        {/* Mensagens de Erro */}
-        {wsError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{wsError}</AlertDescription>
-          </Alert>
-        )}
 
         {/* Status das Filas */}
         {queueStatus && Object.keys(queueStatus).length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Status das Filas</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium">Status das Filas (Tempo Real)</h4>
+              <Badge variant="outline" className="text-xs">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                Atualizando
+              </Badge>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(queueStatus).map(([queue, count]) => (
-                <div key={queue} className="flex justify-between p-2 bg-muted/50 rounded">
-                  <span className="text-sm capitalize">{queue}</span>
-                  <Badge variant="outline">{count} jobs</Badge>
+                <div key={queue} className="flex justify-between p-3 bg-muted/50 rounded-lg border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium capitalize">{queue}</span>
+                  </div>
+                  <Badge variant={count > 0 ? "default" : "secondary"}>
+                    {count} {count === 1 ? 'job' : 'jobs'}
+                  </Badge>
                 </div>
               ))}
             </div>
@@ -412,37 +417,50 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         {/* Progresso dos Jobs */}
         {progressData.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Progresso dos Jobs</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium">Progresso dos Jobs</h4>
+              <Button
+                onClick={getProgress}
+                variant="outline"
+                size="sm"
+              >
+                <Loader2 className="w-3 h-3 mr-1" />
+                Atualizar
+              </Button>
+            </div>
             <div className="space-y-2">
               {progressData.map((job) => (
-                <div key={job.job_id} className="p-3 border rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium capitalize">{job.type}</span>
+                <div key={job.job_id} className="p-4 border rounded-lg bg-card">
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium capitalize">{job.type}</span>
+                      <Badge variant="outline" className="text-xs">
+                        ID: {job.job_id.slice(-8)}
+                      </Badge>
+                    </div>
                     <Badge variant={job.status === 'completed' ? 'default' : job.status === 'failed' ? 'destructive' : 'secondary'}>
-                      {job.status}
+                      {job.status === 'completed' ? 'Concluído' : 
+                       job.status === 'failed' ? 'Falhou' : 
+                       job.status === 'processing' ? 'Processando' : job.status}
                     </Badge>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{job.processed_items} de {job.total_items} processados</span>
-                      <span>{job.progress}%</span>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {job.processed_items.toLocaleString()} de {job.total_items.toLocaleString()} processados
+                      </span>
+                      <span className="font-medium">{job.progress}%</span>
                     </div>
                     <Progress value={job.progress} className="h-2" />
                     {job.message && (
-                      <p className="text-xs text-muted-foreground">{job.message}</p>
+                      <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                        {job.message}
+                      </p>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-            <Button
-              onClick={getProgress}
-              variant="outline"
-              size="sm"
-              className="w-full"
-            >
-              Atualizar Progresso
-            </Button>
           </div>
         )}
 

@@ -16,18 +16,29 @@ import {
   Building2,
   UserCheck,
   Bed,
-  Heart
+  Heart,
+  RefreshCw,
+  AlertCircle
 } from "lucide-react"
 import { useTotalStats } from "@/hooks/use-api"
 
 export default function Dashboard() {
-  const { data: totalStats, loading, error } = useTotalStats();
+  const { data: totalStats, loading, error, refetch } = useTotalStats();
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <div className="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={refetch}
+            disabled={loading}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Atualizando...' : 'Atualizar'}
+          </Button>
           <Button variant="outline" size="sm">
             <Download className="mr-2 h-4 w-4" />
             Download
@@ -45,7 +56,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {loading ? 'Carregando...' : error ? 'Erro' : totalStats?.total_hospitais?.toLocaleString() || '0'}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Carregando...
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-2 text-red-500">
+                  <AlertCircle className="h-4 w-4" />
+                  Erro
+                </div>
+              ) : (
+                totalStats?.total_hospitais?.toLocaleString() || '0'
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Hospitais cadastrados
@@ -62,7 +85,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {loading ? 'Carregando...' : error ? 'Erro' : totalStats?.total_medicos?.toLocaleString() || '0'}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Carregando...
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-2 text-red-500">
+                  <AlertCircle className="h-4 w-4" />
+                  Erro
+                </div>
+              ) : (
+                totalStats?.total_medicos?.toLocaleString() || '0'
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Médicos cadastrados
@@ -77,7 +112,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {loading ? 'Carregando...' : error ? 'Erro' : totalStats?.total_leitos?.toLocaleString() || '0'}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Carregando...
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-2 text-red-500">
+                  <AlertCircle className="h-4 w-4" />
+                  Erro
+                </div>
+              ) : (
+                totalStats?.total_leitos?.toLocaleString() || '0'
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Leitos disponíveis
@@ -92,7 +139,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {loading ? 'Carregando...' : error ? 'Erro' : totalStats?.total_pacientes?.toLocaleString() || '0'}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Carregando...
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-2 text-red-500">
+                  <AlertCircle className="h-4 w-4" />
+                  Erro
+                </div>
+              ) : (
+                totalStats?.total_pacientes?.toLocaleString() || '0'
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Pacientes cadastrados
@@ -100,6 +159,41 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertCircle className="h-4 w-4" />
+              <span className="font-medium">Erro ao carregar dados</span>
+            </div>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={refetch}
+              className="mt-2"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Tentar Novamente
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {totalStats && !loading && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-green-800">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm font-medium">Dados atualizados com sucesso</span>
+            </div>
+            <p className="text-xs text-green-700 mt-1">
+              Última atualização: {new Date().toLocaleString('pt-BR')}
+            </p>
+          </CardContent>
+        </Card>
+      )}
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
