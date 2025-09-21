@@ -1,18 +1,9 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import Home from '@/pages/Home'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
-const Hospitals = lazy(() => import('@/pages/Hospitals'))
-const Doctors = lazy(() => import('@/pages/Doctors'))
-const States = lazy(() => import('@/pages/States'))
 const FileManager = lazy(() => import('@/pages/FileManager'))
-const Analytics = lazy(() => import('@/pages/Analytics'))
-const Reports = lazy(() => import('@/pages/Reports'))
-const Users = lazy(() => import('@/pages/Users'))
-const Orders = lazy(() => import('@/pages/Orders'))
-const Activity = lazy(() => import('@/pages/Activity'))
 
 function App() {
   const LoadingFallback = () => (
@@ -27,7 +18,16 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route 
+          path="/" 
+          element={
+            <DashboardLayout>
+              <Suspense fallback={<LoadingFallback />}>
+                <Dashboard />
+              </Suspense>
+            </DashboardLayout>
+          } 
+        />
         <Route 
           path="/dashboard" 
           element={
@@ -38,97 +38,17 @@ function App() {
             </DashboardLayout>
           } 
         />
-               <Route
-                 path="/hospitals"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Hospitals />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/doctors"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Doctors />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/states"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <States />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/file-manager"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <FileManager />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/analytics"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Analytics />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/reports"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Reports />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/users"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Users />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/orders"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Orders />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-               <Route
-                 path="/activity"
-                 element={
-                   <DashboardLayout>
-                     <Suspense fallback={<LoadingFallback />}>
-                       <Activity />
-                     </Suspense>
-                   </DashboardLayout>
-                 }
-               />
-             </Routes>
+        <Route
+          path="/file-manager"
+          element={
+            <DashboardLayout>
+              <Suspense fallback={<LoadingFallback />}>
+                <FileManager />
+              </Suspense>
+            </DashboardLayout>
+          }
+        />
+      </Routes>
     </Router>
   )
 }

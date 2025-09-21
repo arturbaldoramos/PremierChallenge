@@ -143,13 +143,17 @@ func main() {
 	// Statistics and filtering routes
 	stats := api.PathPrefix("/stats").Subrouter()
 	stats.HandleFunc("/totals", statsHandler.GetTotalStats).Methods("GET")
-	stats.HandleFunc("/hospitais-por-estado", statsHandler.GetHospitalsByState).Methods("GET")
-	stats.HandleFunc("/medicos-por-estado", statsHandler.GetMedicosByState).Methods("GET")
 	stats.HandleFunc("/hospitais-por-especialidade", statsHandler.GetHospitalsBySpecialty).Methods("GET")
 	stats.HandleFunc("/hospitais-por-municipio", statsHandler.GetHospitalsByMunicipio).Methods("GET")
 	stats.HandleFunc("/medicos-distribuicao", statsHandler.GetMedicosDistribution).Methods("GET")
 	stats.HandleFunc("/especialidades", statsHandler.GetEspecialidades).Methods("GET")
+	stats.HandleFunc("/cid10-mais-comuns", statsHandler.GetCid10MaisComuns).Methods("GET")
+	stats.HandleFunc("/hospitais-mais-acessados", statsHandler.GetHospitaisMaisAcessados).Methods("GET")
+	stats.HandleFunc("/debug-cid10", statsHandler.GetDebugCid10).Methods("GET")
 	stats.HandleFunc("/assign-medicos-hospitais", statsHandler.AssignMedicosToHospitals).Methods("POST")
+
+	// Stats2 routes - Nova rota para estados e municípios
+	api.HandleFunc("/stats2", statsHandler.GetStats2).Methods("GET")
 
 	port := ":8080"
 	log.Printf("Server starting on port %s", port)

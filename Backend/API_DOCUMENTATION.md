@@ -19,8 +19,8 @@ Retorna contadores gerais do sistema.
   "data": {
     "total_hospitais": 1500,
     "total_medicos": 280000,
-    "total_estados": 27,
-    "total_municipios": 5570
+    "total_leitos": 125000,
+    "total_pacientes": 1500000
   }
 }
 ```

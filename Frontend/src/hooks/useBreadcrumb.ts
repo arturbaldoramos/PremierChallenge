@@ -14,33 +14,9 @@ const breadcrumbMap: Record<string, BreadcrumbItem[]> = {
   '/dashboard': [
     { label: 'Dashboard', href: '/dashboard' }
   ],
-  '/hospitals': [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Hospitais', href: '/hospitals' }
-  ],
   '/file-manager': [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Gerenciador de Arquivos', href: '/file-manager' }
-  ],
-  '/analytics': [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Analytics', href: '/analytics' }
-  ],
-  '/users': [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Usuários', href: '/users' }
-  ],
-  '/orders': [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Pedidos', href: '/orders' }
-  ],
-  '/activity': [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Atividade', href: '/activity' }
-  ],
-  '/reports': [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Relatórios', href: '/reports' }
   ]
 }
 

@@ -1,13 +1,7 @@
 import {
   Home,
   Settings,
-  Building2,
-  FolderOpen,
-  Stethoscope,
-  MapPin,
-  User,
-  BookOpen,
-  Building
+  FolderOpen
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -18,12 +12,6 @@ export function Sidebar() {
   
   const navigationItems = [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
-    { path: '/hospitals', label: 'Hospitais', icon: Building2 },
-    { path: '/doctors', label: 'Médicos', icon: Stethoscope },
-    { path: '/patients', label: 'Pacientes', icon: User },
-    { path: '/states', label: 'Estados', icon: MapPin },
-    { path: '/municipalities', label: 'Municípios', icon: Building },
-    { path: '/cid', label: 'CID', icon: BookOpen },
     { path: '/file-manager', label: 'Gerenciador de Arquivos', icon: FolderOpen },
   ]
 
