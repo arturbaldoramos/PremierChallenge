@@ -365,13 +365,6 @@ func (h *WebSocketHandler) reconstructFile(chunks []ChunkMessage) (string, error
 	return csvContent, nil
 }
 
-// Helper function para min
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 func (h *WebSocketHandler) processUploadedData(sessionID, fileType, csvData string) error {
 	// Tentar usar o parser unificado primeiro
@@ -422,6 +415,11 @@ func (h *WebSocketHandler) processUnifiedData(sessionID, fileType string, parsed
 	// Para FHIR, primeiro tentar mapear automaticamente
 	if format == parsers.FormatFHIRJSON || format == parsers.FormatFHIRXML {
 		return h.processFHIRData(sessionID, parsedData, batchSize)
+	}
+
+	// Para HL7, processar automaticamente
+	if format == parsers.FormatHL7 {
+		return h.processHL7Data(sessionID, parsedData, batchSize)
 	}
 
 	// Para outros formatos, usar conversão baseada no tipo
@@ -1513,7 +1511,213 @@ func (h *WebSocketHandler) convertRowsToCID10Legacy(parsedData *parsers.ParsedDa
 }
 
 func (h *WebSocketHandler) processFHIRData(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
-	return fmt.Errorf("processamento de dados FHIR não implementado ainda")
+	// Detectar tipo de dados FHIR baseado nos headers
+	dataType := h.detectFHIRDataType(parsedData)
+	
+	// Converter dados FHIR para objetos de domínio
+	domainData, err := h.convertFHIRToDomain(parsedData, dataType)
+	if err != nil {
+		return fmt.Errorf("erro ao converter dados FHIR: %v", err)
+	}
+	
+	// Processar baseado no tipo detectado
+	switch dataType {
+	case "patients", "pacientes":
+		if patients, ok := domainData.([]domain.Paciente); ok {
+			return h.enqueuePatientsJobs(sessionID, patients, batchSize)
+		}
+	case "practitioners", "medicos":
+		if medicos, ok := domainData.([]domain.Medico); ok {
+			// Processar médicos em batches
+			for i := 0; i < len(medicos); i += batchSize {
+				end := i + batchSize
+				if end > len(medicos) {
+					end = len(medicos)
+				}
+				batch := medicos[i:end]
+				if err := h.submitMedicosBatch(sessionID, batch, i/batchSize+1); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	case "organizations", "hospitais":
+		if hospitais, ok := domainData.([]domain.Hospital); ok {
+			// Processar hospitais em batches usando data service
+			_, _, err := h.dataService.UpsertHospitais(hospitais)
+			return err
+		}
+	case "locations", "municipios":
+		if municipios, ok := domainData.([]domain.Municipio); ok {
+			// Processar municípios em batches usando data service
+			_, _, err := h.dataService.UpsertMunicipiosConcurrent(municipios)
+			return err
+		}
+	default:
+		return fmt.Errorf("tipo de dados FHIR não suportado: %s", dataType)
+	}
+	
+	return fmt.Errorf("erro ao processar dados FHIR: tipo não reconhecido")
+}
+
+// detectFHIRDataType detecta o tipo de dados FHIR baseado nos headers
+func (h *WebSocketHandler) detectFHIRDataType(parsedData *parsers.ParsedData) string {
+	// Verificar se há resource_type nos headers
+	for i, header := range parsedData.Headers {
+		if strings.ToLower(header) == "resource_type" {
+			// Verificar os valores na primeira linha
+			if len(parsedData.Rows) > 0 && i < len(parsedData.Rows[0]) {
+				resourceType := strings.ToLower(parsedData.Rows[0][i])
+				switch resourceType {
+				case "patient":
+					return "patients"
+				case "practitioner":
+					return "practitioners"
+				case "organization":
+					return "organizations"
+				case "location":
+					return "locations"
+				}
+			}
+		}
+	}
+	
+	// Fallback: tentar detectar por campos específicos
+	if h.hasFHIRField(parsedData, "patient_id") || h.hasFHIRField(parsedData, "cpf") {
+		return "patients"
+	}
+	if h.hasFHIRField(parsedData, "practitioner_id") || h.hasFHIRField(parsedData, "especialidade") {
+		return "practitioners"
+	}
+	if h.hasFHIRField(parsedData, "organization_id") || h.hasFHIRField(parsedData, "leitos_totais") {
+		return "organizations"
+	}
+	if h.hasFHIRField(parsedData, "location_id") || h.hasFHIRField(parsedData, "codigo_ibge") {
+		return "locations"
+	}
+	
+	return "unknown"
+}
+
+// hasFHIRField verifica se um campo específico existe nos headers
+func (h *WebSocketHandler) hasFHIRField(parsedData *parsers.ParsedData, fieldName string) bool {
+	for _, header := range parsedData.Headers {
+		if strings.ToLower(header) == strings.ToLower(fieldName) {
+			return true
+		}
+	}
+	return false
+}
+
+// convertFHIRToDomain converte dados FHIR parseados para objetos de domínio
+func (h *WebSocketHandler) convertFHIRToDomain(parsedData *parsers.ParsedData, dataType string) (interface{}, error) {
+	// Criar um parser unificado para conversão
+	unifiedParser := parsers.NewUnifiedParser()
+	
+	// Converter usando o parser unificado
+	return unifiedParser.ConvertToDataType(parsedData, dataType)
+}
+
+// processHL7Data processa dados HL7
+func (h *WebSocketHandler) processHL7Data(sessionID string, parsedData *parsers.ParsedData, batchSize int) error {
+	// Detectar tipo de dados HL7 baseado nos headers
+	dataType := h.detectHL7DataType(parsedData)
+	
+	// Converter dados HL7 para objetos de domínio
+	domainData, err := h.convertHL7ToDomain(parsedData, dataType)
+	if err != nil {
+		return fmt.Errorf("erro ao converter dados HL7: %v", err)
+	}
+	
+	// Processar baseado no tipo detectado
+	switch dataType {
+	case "patients", "pacientes":
+		if patients, ok := domainData.([]domain.Paciente); ok {
+			return h.enqueuePatientsJobs(sessionID, patients, batchSize)
+		}
+	case "practitioners", "medicos":
+		if medicos, ok := domainData.([]domain.Medico); ok {
+			// Processar médicos em batches
+			for i := 0; i < len(medicos); i += batchSize {
+				end := i + batchSize
+				if end > len(medicos) {
+					end = len(medicos)
+				}
+				batch := medicos[i:end]
+				if err := h.submitMedicosBatch(sessionID, batch, i/batchSize+1); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	case "organizations", "hospitais":
+		if hospitais, ok := domainData.([]domain.Hospital); ok {
+			// Processar hospitais em batches usando data service
+			_, _, err := h.dataService.UpsertHospitais(hospitais)
+			return err
+		}
+	default:
+		return fmt.Errorf("tipo de dados HL7 não suportado: %s", dataType)
+	}
+	
+	return fmt.Errorf("erro ao processar dados HL7: tipo não reconhecido")
+}
+
+// detectHL7DataType detecta o tipo de dados HL7 baseado nos headers
+func (h *WebSocketHandler) detectHL7DataType(parsedData *parsers.ParsedData) string {
+	// Verificar se há message_type nos headers
+	for i, header := range parsedData.Headers {
+		if strings.ToLower(header) == "message_type" {
+			// Verificar os valores na primeira linha
+			if len(parsedData.Rows) > 0 && i < len(parsedData.Rows[0]) {
+				messageType := strings.ToLower(parsedData.Rows[0][i])
+				// Detectar tipo baseado no prefixo da mensagem
+				if strings.HasPrefix(messageType, "adt^") {
+					return "patients"
+				}
+				if strings.HasPrefix(messageType, "mfn^") {
+					// Para MFN, verificar se é practitioner ou organization
+					// Por simplicidade, assumir practitioners por padrão
+					return "practitioners"
+				}
+				if strings.HasPrefix(messageType, "org^") {
+					return "organizations"
+				}
+			}
+		}
+	}
+	
+	// Fallback: tentar detectar por campos específicos
+	if h.hasHL7Field(parsedData, "patient_id") || h.hasHL7Field(parsedData, "patient_name") {
+		return "patients"
+	}
+	if h.hasHL7Field(parsedData, "practitioner_id") || h.hasHL7Field(parsedData, "especialidade") {
+		return "practitioners"
+	}
+	if h.hasHL7Field(parsedData, "organization_id") || h.hasHL7Field(parsedData, "leitos_totais") {
+		return "organizations"
+	}
+	
+	return "patients" // Default para pacientes
+}
+
+// hasHL7Field verifica se um campo específico existe nos headers HL7
+func (h *WebSocketHandler) hasHL7Field(parsedData *parsers.ParsedData, fieldName string) bool {
+	for _, header := range parsedData.Headers {
+		if strings.ToLower(header) == strings.ToLower(fieldName) {
+			return true
+		}
+	}
+	return false
+}
+
+// convertHL7ToDomain converte dados HL7 parseados para objetos de domínio
+func (h *WebSocketHandler) convertHL7ToDomain(parsedData *parsers.ParsedData, dataType string) (interface{}, error) {
+	// Criar um parser unificado para conversão
+	unifiedParser := parsers.NewUnifiedParser()
+	
+	// Converter usando o parser unificado
+	return unifiedParser.ConvertToDataType(parsedData, dataType)
 }
 
 func (h *WebSocketHandler) processUploadedDataLegacy(sessionID, fileType, csvData string) error {

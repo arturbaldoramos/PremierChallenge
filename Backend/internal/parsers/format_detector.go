@@ -21,6 +21,7 @@ const (
 	FormatJSON
 	FormatFHIRJSON
 	FormatFHIRXML
+	FormatHL7
 	FormatTXT
 )
 
@@ -40,6 +41,8 @@ func (f FileFormat) String() string {
 		return "FHIR_JSON"
 	case FormatFHIRXML:
 		return "FHIR_XML"
+	case FormatHL7:
+		return "HL7"
 	case FormatTXT:
 		return "TXT"
 	default:
@@ -64,6 +67,11 @@ func (d *FormatDetector) DetectFormat(data []byte, filename string) FileFormat {
 	// Primeiro, verificar se é FHIR (priority check)
 	if fhirFormat := d.detectFHIRFormat(data); fhirFormat != FormatUnknown {
 		return fhirFormat
+	}
+
+	// Verificar se é HL7 (priority check)
+	if d.isHL7(data) {
+		return FormatHL7
 	}
 
 	// Mapear MIME types para nossos formatos
@@ -203,6 +211,41 @@ func (d *FormatDetector) isFHIRXML(data []byte) bool {
 	return false
 }
 
+// isHL7 verifica se é um arquivo HL7 válido
+func (d *FormatDetector) isHL7(data []byte) bool {
+	content := string(data[:min(2048, len(data))])
+	
+	// HL7 messages começam com MSH (Message Header)
+	if !strings.HasPrefix(content, "MSH") {
+		return false
+	}
+	
+	// Verificar estrutura básica de HL7
+	lines := strings.Split(content, "\n")
+	if len(lines) < 2 {
+		return false
+	}
+	
+	// Primeira linha deve ser MSH com separadores válidos
+	mshLine := strings.TrimSpace(lines[0])
+	if len(mshLine) < 20 {
+		return false
+	}
+	
+	// Verificar se tem separadores de campo válidos (|, ^, ~, &)
+	validSeparators := []string{"|", "^", "~", "&"}
+	separatorCount := 0
+	
+	for _, sep := range validSeparators {
+		if strings.Contains(mshLine, sep) {
+			separatorCount++
+		}
+	}
+	
+	// Deve ter pelo menos 2 tipos de separadores diferentes
+	return separatorCount >= 2
+}
+
 // detectTextFormat analisa texto puro para identificar formato
 func (d *FormatDetector) detectTextFormat(data []byte, filename string) FileFormat {
 	content := string(data[:min(2048, len(data))])
@@ -289,6 +332,9 @@ func (d *FormatDetector) detectByExtension(filename string) FileFormat {
 	}
 	if strings.HasSuffix(lower, ".json") {
 		return FormatJSON
+	}
+	if strings.HasSuffix(lower, ".hl7") {
+		return FormatHL7
 	}
 	if strings.HasSuffix(lower, ".txt") {
 		return FormatTXT

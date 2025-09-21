@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"example.com/m/v2/internal/domain"
+	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -52,10 +54,16 @@ func (p *UnifiedParser) ParseFile(data []byte, filename string) (*ParsedData, Fi
 		return p.parseFHIRJSON(data)
 	case FormatFHIRXML:
 		return p.parseFHIRXML(data)
+	case FormatHL7:
+		return p.parseHL7(data)
 	case FormatTXT:
 		// Tentar como CSV primeiro
 		if csvData, _, err := p.parseCSV(data); err == nil {
 			return csvData, FormatCSV, nil
+		}
+		// Tentar como HL7
+		if hl7Data, _, err := p.parseHL7(data); err == nil {
+			return hl7Data, FormatHL7, nil
 		}
 		return nil, format, fmt.Errorf("unsupported text format")
 	default:
@@ -296,6 +304,152 @@ func (p *UnifiedParser) parseFHIRXML(data []byte) (*ParsedData, FileFormat, erro
 	}, FormatFHIRXML, nil
 }
 
+// parseHL7 processa arquivos HL7
+func (p *UnifiedParser) parseHL7(data []byte) (*ParsedData, FileFormat, error) {
+	content := string(data)
+	lines := strings.Split(content, "\n")
+	
+	var messages []string
+	var currentMessage strings.Builder
+	
+	// Agrupar linhas em mensagens HL7
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		
+		// Se começa com MSH, é início de nova mensagem
+		if strings.HasPrefix(line, "MSH") {
+			if currentMessage.Len() > 0 {
+				messages = append(messages, currentMessage.String())
+				currentMessage.Reset()
+			}
+		}
+		currentMessage.WriteString(line + "\n")
+	}
+	
+	// Adicionar última mensagem
+	if currentMessage.Len() > 0 {
+		messages = append(messages, currentMessage.String())
+	}
+	
+	if len(messages) == 0 {
+		return nil, FormatHL7, fmt.Errorf("nenhuma mensagem HL7 válida encontrada")
+	}
+	
+	// Headers para HL7
+	headers := []string{
+		"message_type", "message_control_id", "sending_application", 
+		"sending_facility", "receiving_application", "receiving_facility",
+		"message_datetime", "security", "message_version", "patient_id",
+		"patient_name", "patient_dob", "patient_gender", "patient_address",
+		"raw_message",
+	}
+	
+	var rows [][]string
+	
+	// Processar cada mensagem HL7
+	for _, message := range messages {
+		row := p.parseHL7Message(message)
+		rows = append(rows, row)
+	}
+	
+	metadata := map[string]interface{}{
+		"hl7_version": "2.x",
+		"total_messages": len(messages),
+		"columns": len(headers),
+		"original_type": "hl7",
+	}
+	
+	return &ParsedData{
+		Headers:  headers,
+		Rows:     rows,
+		Metadata: metadata,
+	}, FormatHL7, nil
+}
+
+// parseHL7Message extrai dados de uma mensagem HL7 individual
+func (p *UnifiedParser) parseHL7Message(message string) []string {
+	lines := strings.Split(message, "\n")
+	if len(lines) == 0 {
+		return make([]string, 15) // Retornar array vazio com tamanho correto
+	}
+	
+	// Parsear MSH (Message Header)
+	mshLine := lines[0]
+	mshFields := strings.Split(mshLine, "|")
+	
+	messageType := ""
+	messageControlId := ""
+	sendingApp := ""
+	sendingFacility := ""
+	receivingApp := ""
+	receivingFacility := ""
+	messageDateTime := ""
+	security := ""
+	messageVersion := ""
+	
+	if len(mshFields) >= 12 {
+		messageType = mshFields[8]
+		messageControlId = mshFields[9]
+		sendingApp = mshFields[2]
+		sendingFacility = mshFields[3]
+		receivingApp = mshFields[4]
+		receivingFacility = mshFields[5]
+		messageDateTime = mshFields[6]
+		security = mshFields[7]
+		messageVersion = mshFields[11]
+	}
+	
+	// Parsear PID (Patient Identification) se existir
+	patientId := ""
+	patientName := ""
+	patientDob := ""
+	patientGender := ""
+	patientAddress := ""
+	
+	for _, line := range lines {
+		if strings.HasPrefix(line, "PID|") {
+			pidFields := strings.Split(line, "|")
+			if len(pidFields) >= 20 {
+				patientId = pidFields[2]
+				if len(pidFields) >= 6 {
+					patientName = pidFields[5]
+				}
+				if len(pidFields) >= 8 {
+					patientDob = pidFields[7]
+				}
+				if len(pidFields) >= 9 {
+					patientGender = pidFields[8]
+				}
+				if len(pidFields) >= 12 {
+					patientAddress = pidFields[11]
+				}
+			}
+			break
+		}
+	}
+	
+	return []string{
+		messageType,
+		messageControlId,
+		sendingApp,
+		sendingFacility,
+		receivingApp,
+		receivingFacility,
+		messageDateTime,
+		security,
+		messageVersion,
+		patientId,
+		patientName,
+		patientDob,
+		patientGender,
+		patientAddress,
+		message, // Mensagem completa
+	}
+}
+
 // parseFHIRBundle processa um Bundle FHIR
 func (p *UnifiedParser) parseFHIRBundle(bundleData map[string]interface{}) (*ParsedData, FileFormat, error) {
 	entries, ok := bundleData["entry"].([]interface{})
@@ -462,6 +616,10 @@ func (p *UnifiedParser) ConvertToDataType(data *ParsedData, dataType string) (in
 		return p.convertToMedicos(data)
 	case "municipios", "municipalities":
 		return p.convertToMunicipios(data)
+	case "estados", "states":
+		return p.convertToEstados(data)
+	case "cid10", "cid-10":
+		return p.convertToCID10(data)
 	default:
 		return nil, fmt.Errorf("unsupported data type: %s", dataType)
 	}
@@ -469,12 +627,72 @@ func (p *UnifiedParser) ConvertToDataType(data *ParsedData, dataType string) (in
 
 // convertToHospitals converte para []domain.Hospital
 func (p *UnifiedParser) convertToHospitals(data *ParsedData) ([]domain.Hospital, error) {
-	// Implementar conversão baseada nos headers e rows
-	// Esta é uma versão simplificada - expandir conforme necessário
 	var hospitals []domain.Hospital
 	
-	// TODO: Implementar mapeamento de campos
-	// Mapear headers para campos do Hospital
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range data.Headers {
+		headerMap[strings.ToLower(header)] = i
+	}
+	
+	for _, row := range data.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		hospital := domain.Hospital{}
+		
+		// UUID
+		if idx, exists := headerMap["codigo"]; exists && idx < len(row) {
+			if id, err := uuid.Parse(row[idx]); err == nil {
+				hospital.UUID = id
+			} else {
+				hospital.UUID = uuid.New()
+			}
+		} else {
+			hospital.UUID = uuid.New()
+		}
+		
+		// Nome
+		if idx, exists := headerMap["nome"]; exists && idx < len(row) {
+			hospital.Nome = strings.TrimSpace(row[idx])
+		}
+		
+		// CEP
+		if idx, exists := headerMap["cep"]; exists && idx < len(row) {
+			hospital.CEP = strings.TrimSpace(row[idx])
+		}
+		
+		// Especialidades
+		if idx, exists := headerMap["especialidades"]; exists && idx < len(row) {
+			hospital.Especialidades = strings.TrimSpace(row[idx])
+		}
+		
+		// Leitos totais
+		if idx, exists := headerMap["leitos_totais"]; exists && idx < len(row) {
+			if leitos, err := strconv.Atoi(strings.TrimSpace(row[idx])); err == nil {
+				hospital.LeitosTotais = leitos
+			}
+		}
+		
+		// Código do município
+		if idx, exists := headerMap["cidade"]; exists && idx < len(row) {
+			hospital.CodMunicipio = strings.TrimSpace(row[idx])
+		}
+		if idx, exists := headerMap["cod_municipio"]; exists && idx < len(row) {
+			hospital.CodMunicipio = strings.TrimSpace(row[idx])
+		}
+		
+		// Bairro
+		if idx, exists := headerMap["bairro"]; exists && idx < len(row) {
+			hospital.Bairro = strings.TrimSpace(row[idx])
+		}
+		
+		// Só adicionar se tiver pelo menos nome
+		if hospital.Nome != "" {
+			hospitals = append(hospitals, hospital)
+		}
+	}
 	
 	return hospitals, nil
 }
@@ -482,20 +700,328 @@ func (p *UnifiedParser) convertToHospitals(data *ParsedData) ([]domain.Hospital,
 // convertToPatients converte para []domain.Paciente  
 func (p *UnifiedParser) convertToPatients(data *ParsedData) ([]domain.Paciente, error) {
 	var patients []domain.Paciente
-	// TODO: Implementar
+	
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range data.Headers {
+		headerMap[strings.ToLower(header)] = i
+	}
+	
+	for _, row := range data.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		paciente := domain.Paciente{}
+		
+		// ID (UUID do código)
+		if idx, exists := headerMap["id"]; exists && idx < len(row) {
+			if id, err := uuid.Parse(row[idx]); err == nil {
+				paciente.ID = id
+			} else {
+				paciente.ID = uuid.New()
+			}
+		} else if idx, exists := headerMap["codigo"]; exists && idx < len(row) {
+			if id, err := uuid.Parse(row[idx]); err == nil {
+				paciente.ID = id
+			} else {
+				paciente.ID = uuid.New()
+			}
+		} else {
+			paciente.ID = uuid.New()
+		}
+
+		// CPF
+		if idx, exists := headerMap["cpf"]; exists && idx < len(row) {
+			paciente.CPF = strings.TrimSpace(row[idx])
+		}
+
+		// Nome
+		if idx, exists := headerMap["nome"]; exists && idx < len(row) {
+			paciente.Nome = strings.TrimSpace(row[idx])
+		}
+		if idx, exists := headerMap["nome_completo"]; exists && idx < len(row) {
+			paciente.Nome = strings.TrimSpace(row[idx])
+		}
+
+		// Gênero
+		if idx, exists := headerMap["genero"]; exists && idx < len(row) {
+			paciente.Genero = strings.TrimSpace(row[idx])
+		}
+
+		// Código do município
+		if idx, exists := headerMap["cod_municipio"]; exists && idx < len(row) {
+			paciente.CodMunicipio = strings.TrimSpace(row[idx])
+		}
+
+		// Bairro
+		if idx, exists := headerMap["bairro"]; exists && idx < len(row) {
+			paciente.Bairro = strings.TrimSpace(row[idx])
+		}
+
+		// Convênio
+		if idx, exists := headerMap["convenio"]; exists && idx < len(row) {
+			paciente.Convenio = strings.TrimSpace(row[idx])
+		}
+
+		// CID10
+		if idx, exists := headerMap["cid10"]; exists && idx < len(row) {
+			paciente.CID10 = strings.TrimSpace(row[idx])
+		}
+		if idx, exists := headerMap["cid-10"]; exists && idx < len(row) {
+			paciente.CID10 = strings.TrimSpace(row[idx])
+		}
+
+		// Só adicionar se tiver pelo menos CPF ou nome
+		if paciente.CPF != "" || paciente.Nome != "" {
+			patients = append(patients, paciente)
+		}
+	}
+	
 	return patients, nil
 }
 
 // convertToMedicos converte para []domain.Medico
 func (p *UnifiedParser) convertToMedicos(data *ParsedData) ([]domain.Medico, error) {
 	var medicos []domain.Medico
-	// TODO: Implementar  
+	
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range data.Headers {
+		headerMap[strings.ToLower(header)] = i
+	}
+	
+	for _, row := range data.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		medico := domain.Medico{}
+		
+		// UUID
+		if idx, exists := headerMap["codigo"]; exists && idx < len(row) {
+			if id, err := uuid.Parse(row[idx]); err == nil {
+				medico.UUID = id
+			} else {
+				medico.UUID = uuid.New()
+			}
+		} else {
+			medico.UUID = uuid.New()
+		}
+		
+		// Nome
+		if idx, exists := headerMap["nome"]; exists && idx < len(row) {
+			medico.Nome = strings.TrimSpace(row[idx])
+		}
+		if idx, exists := headerMap["nome_completo"]; exists && idx < len(row) {
+			medico.Nome = strings.TrimSpace(row[idx])
+		}
+		
+		// Especialidade
+		if idx, exists := headerMap["especialidade"]; exists && idx < len(row) {
+			medico.Especialidade = strings.TrimSpace(row[idx])
+		}
+		
+		// Código do município
+		if idx, exists := headerMap["cod_municipio"]; exists && idx < len(row) {
+			medico.CodMunicipio = strings.TrimSpace(row[idx])
+		}
+		if idx, exists := headerMap["cidade"]; exists && idx < len(row) {
+			medico.CodMunicipio = strings.TrimSpace(row[idx])
+		}
+		
+		// Só adicionar se tiver pelo menos nome
+		if medico.Nome != "" {
+			medicos = append(medicos, medico)
+		}
+	}
+	
 	return medicos, nil
 }
 
 // convertToMunicipios converte para []domain.Municipio
 func (p *UnifiedParser) convertToMunicipios(data *ParsedData) ([]domain.Municipio, error) {
 	var municipios []domain.Municipio
-	// TODO: Implementar
+	
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range data.Headers {
+		headerMap[strings.ToLower(header)] = i
+	}
+	
+	for _, row := range data.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		municipio := domain.Municipio{}
+		
+		// Código IBGE
+		if idx, exists := headerMap["codigo_ibge"]; exists && idx < len(row) {
+			municipio.Codigo = strings.TrimSpace(row[idx])
+		}
+		
+		// Nome
+		if idx, exists := headerMap["nome"]; exists && idx < len(row) {
+			municipio.Nome = strings.TrimSpace(row[idx])
+		}
+		
+		// Latitude
+		if idx, exists := headerMap["latitude"]; exists && idx < len(row) {
+			municipio.Latitude = strings.TrimSpace(row[idx])
+		}
+		
+		// Longitude
+		if idx, exists := headerMap["longitude"]; exists && idx < len(row) {
+			municipio.Longitude = strings.TrimSpace(row[idx])
+		}
+		
+		// Capital
+		if idx, exists := headerMap["capital"]; exists && idx < len(row) {
+			municipio.Capital = strings.TrimSpace(row[idx])
+		}
+		
+		// Código UF
+		if idx, exists := headerMap["codigo_uf"]; exists && idx < len(row) {
+			municipio.CodigoUF = strings.TrimSpace(row[idx])
+		}
+		
+		// SIAFI ID
+		if idx, exists := headerMap["siafi_id"]; exists && idx < len(row) {
+			municipio.SiafiId = strings.TrimSpace(row[idx])
+		}
+		
+		// DDD
+		if idx, exists := headerMap["ddd"]; exists && idx < len(row) {
+			municipio.DDD = strings.TrimSpace(row[idx])
+		}
+		
+		// Fuso horário
+		if idx, exists := headerMap["fuso_horario"]; exists && idx < len(row) {
+			municipio.FusoHora = strings.TrimSpace(row[idx])
+		}
+		
+		// População
+		if idx, exists := headerMap["populacao"]; exists && idx < len(row) {
+			if pop, err := strconv.Atoi(strings.TrimSpace(row[idx])); err == nil {
+				municipio.Populacao = pop
+			}
+		}
+		
+		// Só adicionar se tiver pelo menos código e nome
+		if municipio.Codigo != "" && municipio.Nome != "" {
+			municipios = append(municipios, municipio)
+		}
+	}
+	
 	return municipios, nil
+}
+
+// convertToEstados converte para []domain.Estado
+func (p *UnifiedParser) convertToEstados(data *ParsedData) ([]domain.Estado, error) {
+	var estados []domain.Estado
+	
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range data.Headers {
+		headerMap[strings.ToLower(header)] = i
+	}
+	
+	for _, row := range data.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		estado := domain.Estado{}
+		
+		// Código UF
+		if idx, exists := headerMap["codigo_uf"]; exists && idx < len(row) {
+			estado.Codigo = strings.TrimSpace(row[idx])
+		}
+		
+		// UF
+		if idx, exists := headerMap["uf"]; exists && idx < len(row) {
+			estado.UnidadeFederativa = strings.TrimSpace(row[idx])
+		}
+		
+		// Nome
+		if idx, exists := headerMap["nome"]; exists && idx < len(row) {
+			estado.Nome = strings.TrimSpace(row[idx])
+		}
+		
+		// Região
+		if idx, exists := headerMap["regiao"]; exists && idx < len(row) {
+			estado.Regiao = strings.TrimSpace(row[idx])
+		}
+		
+		// Latitude
+		if idx, exists := headerMap["latitude"]; exists && idx < len(row) {
+			estado.Latitude = strings.TrimSpace(row[idx])
+		}
+		
+		// Longitude
+		if idx, exists := headerMap["longitude"]; exists && idx < len(row) {
+			estado.Longitude = strings.TrimSpace(row[idx])
+		}
+		
+		// Só adicionar se tiver pelo menos código e nome
+		if estado.Codigo != "" && estado.Nome != "" {
+			estados = append(estados, estado)
+		}
+	}
+	
+	return estados, nil
+}
+
+// convertToCID10 converte para []domain.Cid10
+func (p *UnifiedParser) convertToCID10(data *ParsedData) ([]domain.Cid10, error) {
+	var cid10s []domain.Cid10
+	
+	// Mapear headers para índices
+	headerMap := make(map[string]int)
+	for i, header := range data.Headers {
+		headerMap[strings.ToLower(header)] = i
+	}
+	
+	for _, row := range data.Rows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		cid10 := domain.Cid10{}
+		
+		// ID
+		if idx, exists := headerMap["id"]; exists && idx < len(row) {
+			if id, err := strconv.Atoi(strings.TrimSpace(row[idx])); err == nil {
+				cid10.ID = id
+			}
+		}
+		
+		// Código
+		if idx, exists := headerMap["codigo"]; exists && idx < len(row) {
+			cid10.Codigo = strings.TrimSpace(row[idx])
+		}
+		
+		// Descrição
+		if idx, exists := headerMap["descricao"]; exists && idx < len(row) {
+			cid10.Descricao = strings.TrimSpace(row[idx])
+		}
+		
+		// Categoria
+		if idx, exists := headerMap["categoria"]; exists && idx < len(row) {
+			cid10.Categoria = strings.TrimSpace(row[idx])
+		}
+		
+		// Grupo
+		if idx, exists := headerMap["grupo"]; exists && idx < len(row) {
+			cid10.Grupo = strings.TrimSpace(row[idx])
+		}
+		
+		// Só adicionar se tiver pelo menos código e descrição
+		if cid10.Codigo != "" && cid10.Descricao != "" {
+			cid10s = append(cid10s, cid10)
+		}
+	}
+	
+	return cid10s, nil
 }
