@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -23,10 +24,10 @@ type StatsResponse struct {
 }
 
 type TotalStatsResponse struct {
-	TotalHospitais  int64 `json:"total_hospitais"`
-	TotalMedicos    int64 `json:"total_medicos"`
-	TotalEstados    int64 `json:"total_estados"`
-	TotalMunicipios int64 `json:"total_municipios"`
+	TotalHospitais int64 `json:"total_hospitais"`
+	TotalMedicos   int64 `json:"total_medicos"`
+	TotalLeitos    int64 `json:"total_leitos"`
+	TotalPacientes int64 `json:"total_pacientes"`
 }
 
 type HospitalsByStateResponse struct {
@@ -104,15 +105,15 @@ func (h *StatsHandler) GetTotalStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Contar estados
-	if err := h.db.Model(&domain.Estado{}).Count(&stats.TotalEstados).Error; err != nil {
-		http.Error(w, "Erro ao contar estados", http.StatusInternalServerError)
+	// Contar total de leitos
+	if err := h.db.Model(&domain.Hospital{}).Select("COALESCE(SUM(leitos_totais), 0)").Scan(&stats.TotalLeitos).Error; err != nil {
+		http.Error(w, "Erro ao contar leitos", http.StatusInternalServerError)
 		return
 	}
 
-	// Contar municípios
-	if err := h.db.Model(&domain.Municipio{}).Count(&stats.TotalMunicipios).Error; err != nil {
-		http.Error(w, "Erro ao contar municípios", http.StatusInternalServerError)
+	// Contar pacientes
+	if err := h.db.Model(&domain.Paciente{}).Count(&stats.TotalPacientes).Error; err != nil {
+		http.Error(w, "Erro ao contar pacientes", http.StatusInternalServerError)
 		return
 	}
 
@@ -129,15 +130,22 @@ func (h *StatsHandler) GetTotalStats(w http.ResponseWriter, r *http.Request) {
 func (h *StatsHandler) GetHospitalsByState(w http.ResponseWriter, r *http.Request) {
 	var results []HospitalsByStateResponse
 
+	// Primeiro, vamos verificar se temos dados básicos
+	var estadoCount, municipioCount, hospitalCount int64
+	h.db.Model(&domain.Estado{}).Count(&estadoCount)
+	h.db.Model(&domain.Municipio{}).Count(&municipioCount)
+	h.db.Model(&domain.Hospital{}).Count(&hospitalCount)
+
+	// Query simplificada para debug
 	query := `
 		SELECT 
-			e.codigo as estado,
+			e.unidade_federativa as estado,
 			e.nome as nome_estado,
 			COUNT(h.id) as count
 		FROM estados e
-		LEFT JOIN municipios m ON e.codigo = m.codigo_uf
+		LEFT JOIN municipios m ON e.unidade_federativa = m.codigo_uf
 		LEFT JOIN hospitals h ON m.codigo = h.cod_municipio
-		GROUP BY e.codigo, e.nome
+		GROUP BY e.unidade_federativa, e.nome
 		ORDER BY count DESC
 	`
 
@@ -146,9 +154,31 @@ func (h *StatsHandler) GetHospitalsByState(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Se não há resultados, vamos tentar uma abordagem diferente
+	if len(results) == 0 {
+		// Query alternativa - buscar hospitais diretamente
+		altQuery := `
+			SELECT 
+				COALESCE(e.unidade_federativa, 'N/A') as estado,
+				COALESCE(e.nome, 'Estado não encontrado') as nome_estado,
+				COUNT(h.id) as count
+			FROM hospitals h
+			LEFT JOIN municipios m ON h.cod_municipio = m.codigo
+			LEFT JOIN estados e ON m.codigo_uf = e.unidade_federativa
+			GROUP BY e.unidade_federativa, e.nome
+			ORDER BY count DESC
+		`
+
+		if err := h.db.Raw(altQuery).Scan(&results).Error; err != nil {
+			http.Error(w, "Erro ao buscar hospitais por estado (alternativa)", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	response := StatsResponse{
 		Success: true,
 		Data:    results,
+		Message: fmt.Sprintf("Debug: Estados=%d, Municípios=%d, Hospitais=%d", estadoCount, municipioCount, hospitalCount),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -159,15 +189,21 @@ func (h *StatsHandler) GetHospitalsByState(w http.ResponseWriter, r *http.Reques
 func (h *StatsHandler) GetMedicosByState(w http.ResponseWriter, r *http.Request) {
 	var results []MedicosByStateResponse
 
+	// Primeiro, vamos verificar se temos dados básicos
+	var estadoCount, municipioCount, medicoCount int64
+	h.db.Model(&domain.Estado{}).Count(&estadoCount)
+	h.db.Model(&domain.Municipio{}).Count(&municipioCount)
+	h.db.Model(&domain.Medico{}).Count(&medicoCount)
+
 	query := `
 		SELECT 
-			e.codigo as estado,
+			e.unidade_federativa as estado,
 			e.nome as nome_estado,
 			COUNT(m.uuid) as count
 		FROM estados e
-		LEFT JOIN municipios mu ON e.codigo = mu.codigo_uf
+		LEFT JOIN municipios mu ON e.unidade_federativa = mu.codigo_uf
 		LEFT JOIN medicos m ON mu.codigo = m.cod_municipio
-		GROUP BY e.codigo, e.nome
+		GROUP BY e.unidade_federativa, e.nome
 		ORDER BY count DESC
 	`
 
@@ -176,9 +212,31 @@ func (h *StatsHandler) GetMedicosByState(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Se não há resultados, vamos tentar uma abordagem diferente
+	if len(results) == 0 {
+		// Query alternativa - buscar médicos diretamente
+		altQuery := `
+			SELECT 
+				COALESCE(e.unidade_federativa, 'N/A') as estado,
+				COALESCE(e.nome, 'Estado não encontrado') as nome_estado,
+				COUNT(m.uuid) as count
+			FROM medicos m
+			LEFT JOIN municipios mu ON m.cod_municipio = mu.codigo
+			LEFT JOIN estados e ON mu.codigo_uf = e.unidade_federativa
+			GROUP BY e.unidade_federativa, e.nome
+			ORDER BY count DESC
+		`
+
+		if err := h.db.Raw(altQuery).Scan(&results).Error; err != nil {
+			http.Error(w, "Erro ao buscar médicos por estado (alternativa)", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	response := StatsResponse{
 		Success: true,
 		Data:    results,
+		Message: fmt.Sprintf("Debug: Estados=%d, Municípios=%d, Médicos=%d", estadoCount, municipioCount, medicoCount),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
