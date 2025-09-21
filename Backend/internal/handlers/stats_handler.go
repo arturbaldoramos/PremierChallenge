@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -30,16 +29,22 @@ type TotalStatsResponse struct {
 	TotalPacientes int64 `json:"total_pacientes"`
 }
 
-type HospitalsByStateResponse struct {
-	Estado string `json:"estado"`
-	Nome   string `json:"nome_estado"`
+type Stats2Response struct {
+	TotalEstados    int64 `json:"total_estados"`
+	TotalMunicipios int64 `json:"total_municipios"`
+}
+
+type Cid10Response struct {
+	Cid10  string `json:"cid10"`
+	Doenca string `json:"doenca"`
 	Count  int64  `json:"count"`
 }
 
-type MedicosByStateResponse struct {
-	Estado string `json:"estado"`
-	Nome   string `json:"nome_estado"`
-	Count  int64  `json:"count"`
+type HospitalAccessResponse struct {
+	HospitalUUID   string `json:"hospital_uuid"`
+	HospitalNome   string `json:"hospital_nome"`
+	Especialidades string `json:"especialidades"`
+	Count          int64  `json:"count"`
 }
 
 type MedicosDistributionResponse struct {
@@ -126,117 +131,123 @@ func (h *StatsHandler) GetTotalStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GET /api/v1/stats/hospitais-por-estado - Hospitais agrupados por estado
-func (h *StatsHandler) GetHospitalsByState(w http.ResponseWriter, r *http.Request) {
-	var results []HospitalsByStateResponse
+// GET /api/v1/stats2 - Estatísticas de estados e municípios
+func (h *StatsHandler) GetStats2(w http.ResponseWriter, r *http.Request) {
+	var stats Stats2Response
 
-	// Primeiro, vamos verificar se temos dados básicos
-	var estadoCount, municipioCount, hospitalCount int64
-	h.db.Model(&domain.Estado{}).Count(&estadoCount)
-	h.db.Model(&domain.Municipio{}).Count(&municipioCount)
-	h.db.Model(&domain.Hospital{}).Count(&hospitalCount)
-
-	// Query simplificada para debug
-	query := `
-		SELECT 
-			e.unidade_federativa as estado,
-			e.nome as nome_estado,
-			COUNT(h.id) as count
-		FROM estados e
-		LEFT JOIN municipios m ON e.unidade_federativa = m.codigo_uf
-		LEFT JOIN hospitals h ON m.codigo = h.cod_municipio
-		GROUP BY e.unidade_federativa, e.nome
-		ORDER BY count DESC
-	`
-
-	if err := h.db.Raw(query).Scan(&results).Error; err != nil {
-		http.Error(w, "Erro ao buscar hospitais por estado", http.StatusInternalServerError)
+	// Contar estados
+	if err := h.db.Model(&domain.Estado{}).Count(&stats.TotalEstados).Error; err != nil {
+		http.Error(w, "Erro ao contar estados", http.StatusInternalServerError)
 		return
 	}
 
-	// Se não há resultados, vamos tentar uma abordagem diferente
-	if len(results) == 0 {
-		// Query alternativa - buscar hospitais diretamente
-		altQuery := `
-			SELECT 
-				COALESCE(e.unidade_federativa, 'N/A') as estado,
-				COALESCE(e.nome, 'Estado não encontrado') as nome_estado,
-				COUNT(h.id) as count
-			FROM hospitals h
-			LEFT JOIN municipios m ON h.cod_municipio = m.codigo
-			LEFT JOIN estados e ON m.codigo_uf = e.unidade_federativa
-			GROUP BY e.unidade_federativa, e.nome
-			ORDER BY count DESC
-		`
-
-		if err := h.db.Raw(altQuery).Scan(&results).Error; err != nil {
-			http.Error(w, "Erro ao buscar hospitais por estado (alternativa)", http.StatusInternalServerError)
-			return
-		}
+	// Contar municípios
+	if err := h.db.Model(&domain.Municipio{}).Count(&stats.TotalMunicipios).Error; err != nil {
+		http.Error(w, "Erro ao contar municípios", http.StatusInternalServerError)
+		return
 	}
 
 	response := StatsResponse{
 		Success: true,
-		Data:    results,
-		Message: fmt.Sprintf("Debug: Estados=%d, Municípios=%d, Hospitais=%d", estadoCount, municipioCount, hospitalCount),
+		Data:    stats,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// GET /api/v1/stats/medicos-por-estado - Médicos agrupados por estado
-func (h *StatsHandler) GetMedicosByState(w http.ResponseWriter, r *http.Request) {
-	var results []MedicosByStateResponse
-
-	// Primeiro, vamos verificar se temos dados básicos
-	var estadoCount, municipioCount, medicoCount int64
-	h.db.Model(&domain.Estado{}).Count(&estadoCount)
-	h.db.Model(&domain.Municipio{}).Count(&municipioCount)
-	h.db.Model(&domain.Medico{}).Count(&medicoCount)
+// GET /api/v1/stats/cid10-mais-comuns - Doenças mais comuns (CID10)
+func (h *StatsHandler) GetCid10MaisComuns(w http.ResponseWriter, r *http.Request) {
+	var results []Cid10Response
 
 	query := `
 		SELECT 
-			e.unidade_federativa as estado,
-			e.nome as nome_estado,
-			COUNT(m.uuid) as count
-		FROM estados e
-		LEFT JOIN municipios mu ON e.unidade_federativa = mu.codigo_uf
-		LEFT JOIN medicos m ON mu.codigo = m.cod_municipio
-		GROUP BY e.unidade_federativa, e.nome
+			p.cid10,
+			COALESCE(c.descricao, 'CID10 não encontrado') as doenca,
+			COUNT(p.cid10) as count
+		FROM pacientes p
+		LEFT JOIN cid10 c ON p.cid10 = c.codigo
+		WHERE p.cid10 IS NOT NULL AND p.cid10 != ''
+		GROUP BY p.cid10, c.descricao
 		ORDER BY count DESC
+		LIMIT 5
 	`
 
 	if err := h.db.Raw(query).Scan(&results).Error; err != nil {
-		http.Error(w, "Erro ao buscar médicos por estado", http.StatusInternalServerError)
+		http.Error(w, "Erro ao buscar doenças mais comuns", http.StatusInternalServerError)
 		return
-	}
-
-	// Se não há resultados, vamos tentar uma abordagem diferente
-	if len(results) == 0 {
-		// Query alternativa - buscar médicos diretamente
-		altQuery := `
-			SELECT 
-				COALESCE(e.unidade_federativa, 'N/A') as estado,
-				COALESCE(e.nome, 'Estado não encontrado') as nome_estado,
-				COUNT(m.uuid) as count
-			FROM medicos m
-			LEFT JOIN municipios mu ON m.cod_municipio = mu.codigo
-			LEFT JOIN estados e ON mu.codigo_uf = e.unidade_federativa
-			GROUP BY e.unidade_federativa, e.nome
-			ORDER BY count DESC
-		`
-
-		if err := h.db.Raw(altQuery).Scan(&results).Error; err != nil {
-			http.Error(w, "Erro ao buscar médicos por estado (alternativa)", http.StatusInternalServerError)
-			return
-		}
 	}
 
 	response := StatsResponse{
 		Success: true,
 		Data:    results,
-		Message: fmt.Sprintf("Debug: Estados=%d, Municípios=%d, Médicos=%d", estadoCount, municipioCount, medicoCount),
+		Message: "Top 5 doenças mais comuns (CID10) dos pacientes",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GET /api/v1/stats/hospitais-mais-acessados - Hospitais mais acessados pelos pacientes
+func (h *StatsHandler) GetHospitaisMaisAcessados(w http.ResponseWriter, r *http.Request) {
+	var results []HospitalAccessResponse
+
+	query := `
+		SELECT 
+			h.uuid as hospital_uuid,
+			h.nome as hospital_nome,
+			h.especialidades as especialidades,
+			COUNT(*) as count
+		FROM hospitals h
+		JOIN medico_hospital mh ON h.uuid = mh.hospital_uuid
+		JOIN medicos m ON mh.medico_uuid = m.uuid
+		JOIN pacientes p ON p.cod_municipio = m.cod_municipio
+		GROUP BY h.uuid, h.nome, h.especialidades
+		ORDER BY count DESC
+		LIMIT 20
+	`
+
+	if err := h.db.Raw(query).Scan(&results).Error; err != nil {
+		http.Error(w, "Erro ao buscar hospitais mais acessados", http.StatusInternalServerError)
+		return
+	}
+
+	response := StatsResponse{
+		Success: true,
+		Data:    results,
+		Message: "Top 20 hospitais mais acessados pelos pacientes",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GET /api/v1/stats/debug-cid10 - Debug: Contar doenças por CID10
+func (h *StatsHandler) GetDebugCid10(w http.ResponseWriter, r *http.Request) {
+	var results []struct {
+		Cid10      string `json:"cid10"`
+		Quantidade int64  `json:"quantidade"`
+	}
+
+	// Query básica para contar por CID10
+	query := `
+		SELECT cid10, COUNT(*) as quantidade 
+		FROM pacientes 
+		WHERE cid10 IS NOT NULL AND cid10 != ''
+		GROUP BY cid10 
+		ORDER BY quantidade DESC
+		LIMIT 20
+	`
+
+	if err := h.db.Raw(query).Scan(&results).Error; err != nil {
+		http.Error(w, "Erro ao executar query de debug", http.StatusInternalServerError)
+		return
+	}
+
+	response := StatsResponse{
+		Success: true,
+		Data:    results,
+		Message: "Debug: Contagem de doenças por CID10 (top 20)",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
