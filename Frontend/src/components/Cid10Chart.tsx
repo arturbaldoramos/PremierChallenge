@@ -141,10 +141,13 @@ export function Cid10Chart() {
               <Tooltip content={<CustomTooltip />} />
               <Legend 
                 verticalAlign="bottom" 
-                height={36}
+                height={60}
+                iconType="circle"
                 formatter={(_value, entry: any) => (
-                  <span style={{ color: entry.color, fontSize: '12px' }}>
-                    {entry.payload.cid10} - {entry.payload.nome}
+                  <span style={{ color: entry.color, fontSize: '11px', fontWeight: '500' }}>
+                    {entry.payload.cid10} - {entry.payload.nome.length > 15 
+                      ? entry.payload.nome.substring(0, 15) + '...' 
+                      : entry.payload.nome}
                   </span>
                 )}
               />
@@ -152,16 +155,24 @@ export function Cid10Chart() {
           </ResponsiveContainer>
         </div>
         
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           {chartData.map((item, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={index} className="flex items-start gap-3 p-2 border rounded-lg">
               <div 
-                className="w-3 h-3 rounded-full" 
+                className="w-4 h-4 rounded-full mt-0.5 flex-shrink-0" 
                 style={{ backgroundColor: item.fill }}
               ></div>
-              <span className="text-muted-foreground">
-                {item.cid10}: {item.percentual}%
-              </span>
+              <div className="min-w-0">
+                <div className="font-semibold text-primary">
+                  {item.cid10}
+                </div>
+                <div className="text-muted-foreground text-xs line-clamp-1">
+                  {item.nome}
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  {item.count.toLocaleString()} pacientes ({item.percentual}%)
+                </div>
+              </div>
             </div>
           ))}
         </div>

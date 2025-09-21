@@ -9,8 +9,7 @@ import {
   Download,
   Building2
 } from "lucide-react"
-import { useTotalStats } from "@/hooks/use-api"
-import { Stats2Card } from "@/components/Stats2Card"
+import { useTotalStats, useStats2 } from "@/hooks/use-api"
 import { Cid10Stats } from "@/components/Cid10Stats"
 import { HospitaisMaisAcessados } from "@/components/HospitaisMaisAcessados"
 import { HospitaisChart } from "@/components/HospitaisChart"
@@ -18,6 +17,7 @@ import { Cid10Chart } from "@/components/Cid10Chart"
 
 export default function Dashboard() {
   const { data: totalStats, loading, error, refetch } = useTotalStats();
+  const { data: stats2 } = useStats2();
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -39,6 +39,13 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Texto indicativo de estados e municípios */}
+      {stats2 && (
+        <div className="text-center text-sm text-muted-foreground">
+          Dados de <span className="font-semibold text-primary">{stats2.total_estados}</span> estados e <span className="font-semibold text-primary">{stats2.total_municipios?.toLocaleString()}</span> municípios
+        </div>
+      )}
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -154,6 +161,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
+
       {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
@@ -190,15 +198,15 @@ export default function Dashboard() {
       )}
 
       {/* Nova seção com estatísticas adicionais */}
-      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="xl:col-span-1">
-          <Stats2Card />
-        </div>
-        <div className="xl:col-span-1">
-          <Cid10Stats />
-        </div>
-        <div className="sm:col-span-2 xl:col-span-1">
+      <div className="space-y-6">
+        {/* Primeira linha: Hospitais mais acessados (horizontal) */}
+        <div className="w-full">
           <HospitaisMaisAcessados />
+        </div>
+        
+        {/* Segunda linha: Doenças mais comuns */}
+        <div className="w-full">
+          <Cid10Stats />
         </div>
       </div>
 
